@@ -1,17 +1,19 @@
-export const availableFtc = 10000
+export const availableAmount = 10000
 
 export const modes = {
   exchange: {
     actionText: '立即兑换',
     balanceLabel: '可用',
     cardEyebrow: '当前兑换价',
-    cardTitle: '1 FTC = 1 DW20',
+    cardTitle: '1 DW20 = 1 FTC',
+    confirmAmountLabel: '兑换数量',
     heroEyebrow: '资产兑换',
-    heroTitle: 'FTC 兑换 DW20',
+    heroTitle: 'DW20 兑换 FTC',
     heroSubtitle: '用 DW20 兑换猜奖币 FTC，即可参与竞猜',
     inputLabel: '输入兑换数量',
+    inputToken: 'DW20',
     outputLabel: '可获得',
-    outputToken: 'DW20',
+    outputToken: 'FTC',
     placeholder: '最小兑换 1',
     recordTitle: '兑换记录',
     tabLabel: '猜奖币兑换',
@@ -21,10 +23,12 @@ export const modes = {
     balanceLabel: '可提',
     cardEyebrow: '存入比例',
     cardTitle: '1 FTC = 1 DW20',
+    confirmAmountLabel: '存入数量',
     heroEyebrow: '奖金存入',
     heroTitle: '存入无链钱包',
     heroSubtitle: '将您的 FTC 奖金资产提现到无链钱包',
     inputLabel: '输入存入数量',
+    inputToken: 'FTC',
     outputLabel: '预计到账',
     outputToken: 'DW20',
     placeholder: '最小存入 1',

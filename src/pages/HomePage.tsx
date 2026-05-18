@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { availableFtc, modes, type Mode } from '../data/exchange'
+import { availableAmount, modes, type Mode } from '../data/exchange'
 import { runOnKeyboardClick } from '../lib/keyboard'
 
 type HomePageProps = {
@@ -9,7 +9,9 @@ type HomePageProps = {
 function HomePage({ onOpenRecords }: HomePageProps) {
   const [amount, setAmount] = useState('')
   const [activeMode, setActiveMode] = useState<Mode>('exchange')
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const mode = modes[activeMode]
+  const feeAmount = 10
 
   const receiveAmount = useMemo(() => {
     const value = Number(amount)
@@ -21,10 +23,31 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     return String(value)
   }, [amount])
 
+  const paymentAmount = useMemo(() => {
+    const value = Number(amount)
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return ''
+    }
+
+    return String(value)
+  }, [amount])
+
+  const totalPayment = useMemo(() => {
+    const value = Number(paymentAmount)
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return feeAmount
+    }
+
+    return value + feeAmount
+  }, [paymentAmount])
+
   const canExchange = Number(receiveAmount) >= 1
   const switchMode = (nextMode: Mode) => {
     setActiveMode(nextMode)
     setAmount('')
+    setIsConfirmOpen(false)
   }
 
   const getTabClassName = (tabMode: Mode) =>
@@ -133,7 +156,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
               {mode.inputLabel}
             </label>
             <span className="whitespace-nowrap text-[13px] font-semibold text-[#8a92a6]">
-              {mode.balanceLabel} {availableFtc.toLocaleString()} FTC
+              {mode.balanceLabel} {availableAmount.toLocaleString()} {mode.inputToken}
             </span>
           </div>
           <div className="mb-[18px] grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-[18px] border border-[#e9edf5] bg-[#f8faff] px-4 focus-within:border-[rgba(79,125,241,0.42)] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(79,125,241,0.1)]">
@@ -147,7 +170,9 @@ function HomePage({ onOpenRecords }: HomePageProps) {
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
-            <strong className="text-[15px] font-black text-[#172033]">FTC</strong>
+            <strong className="text-[15px] font-black text-[#172033]">
+              {mode.inputToken}
+            </strong>
           </div>
 
           <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -182,8 +207,12 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             role="button"
             tabIndex={canExchange ? 0 : -1}
             aria-disabled={!canExchange}
-            onClick={() => undefined}
-            onKeyDown={runOnKeyboardClick(() => undefined, !canExchange)}
+            onClick={() => {
+              if (canExchange) {
+                setIsConfirmOpen(true)
+              }
+            }}
+            onKeyDown={runOnKeyboardClick(() => setIsConfirmOpen(true), !canExchange)}
           >
             {mode.actionText}
           </div>
@@ -222,7 +251,144 @@ function HomePage({ onOpenRecords }: HomePageProps) {
           </div>
         </div>
       </section>
+
+      {isConfirmOpen && (
+        <ConfirmDialog
+          feeAmount={feeAmount}
+          amountLabel={mode.confirmAmountLabel}
+          modeLabel={activeMode === 'wallet' ? '确认存入' : '确认兑换'}
+          paymentAmount={paymentAmount}
+          totalPayment={totalPayment}
+          token={mode.inputToken}
+          onCancel={() => setIsConfirmOpen(false)}
+          onConfirm={() => setIsConfirmOpen(false)}
+        />
+      )}
     </main>
+  )
+}
+
+type ConfirmDialogProps = {
+  amountLabel: string
+  feeAmount: number
+  modeLabel: string
+  paymentAmount: string
+  token: string
+  totalPayment: number
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function ConfirmDialog({
+  amountLabel,
+  feeAmount,
+  modeLabel,
+  paymentAmount,
+  token,
+  totalPayment,
+  onCancel,
+  onConfirm,
+}: ConfirmDialogProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#111827]/45 px-3 backdrop-blur-[2px] sm:items-center"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <section
+        className="w-full max-w-[390px] rounded-t-[30px] bg-white p-5 shadow-[0_-24px_70px_rgba(15,23,42,0.24)] [animation:confirm-sheet-in_220ms_ease-out] sm:rounded-[30px]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="relative pb-5 text-center">
+          <div
+            className="absolute top-0 right-0 grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-[#f4f6fb] text-2xl leading-none text-[#687386]"
+            role="button"
+            tabIndex={0}
+            aria-label="关闭弹框"
+            onClick={onCancel}
+            onKeyDown={runOnKeyboardClick(onCancel)}
+          >
+            ×
+          </div>
+          <h2
+            className="m-0 text-[22px] leading-none font-black text-[#172033]"
+            id="confirm-title"
+          >
+            {modeLabel}
+          </h2>
+          <p className="mt-2 mb-0 text-sm font-semibold text-[#8a92a6]">
+            请确认本次交易明细
+          </p>
+        </header>
+
+        <div>
+          <div className="mb-4 rounded-[24px] bg-[#f7f9fd] px-4 py-5 text-center">
+            <p className="mb-2 text-sm font-bold text-[#7b8498]">共计支付</p>
+            <strong className="block text-[30px] leading-none font-black text-[#172033]">
+              {totalPayment.toLocaleString()}
+            </strong>
+            <span className="mt-2 block text-sm font-black text-[#23b594]">
+              {token}
+            </span>
+          </div>
+
+          <div className="rounded-[22px] border border-[#edf0f6] bg-white px-4">
+            <ConfirmRow
+              label={amountLabel}
+              value={`${Number(paymentAmount).toLocaleString()} ${token}`}
+              valueClassName="text-[#1677ff]"
+            />
+            <ConfirmRow
+              label="手续费"
+              value={`${feeAmount.toLocaleString()} ${token}`}
+            />
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div
+              className="grid min-h-[50px] cursor-pointer place-items-center rounded-[16px] bg-[#f1f4f9] text-[16px] font-extrabold text-[#394255] transition-transform duration-200 active:translate-y-px"
+              role="button"
+              tabIndex={0}
+              onClick={onCancel}
+              onKeyDown={runOnKeyboardClick(onCancel)}
+            >
+              取消
+            </div>
+            <div
+              className="grid min-h-[50px] cursor-pointer place-items-center rounded-[16px] bg-[#172033] text-[16px] font-extrabold text-white shadow-[0_12px_24px_rgba(23,32,51,0.22)] transition-transform duration-200 active:translate-y-px"
+              role="button"
+              tabIndex={0}
+              onClick={onConfirm}
+              onKeyDown={runOnKeyboardClick(onConfirm)}
+            >
+              确定
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ConfirmRow({
+  label,
+  value,
+  valueClassName = 'text-[#172033]',
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[#edf0f6] py-4 last:border-b-0">
+      <span className="text-[15px] font-bold text-[#7b8498]">{label}</span>
+      <strong className={`text-right text-[16px] font-black ${valueClassName}`}>
+        {value}
+      </strong>
+    </div>
   )
 }
 
