@@ -67,7 +67,7 @@
 .hero-copy {
   position: relative;
   z-index: 1;
-  padding: 18px 24px 0;
+  padding: 18px  0px 0px 24px;
 }
 
 .hero-copy p {
@@ -82,14 +82,16 @@
   font-size: 31px;
   font-weight: 800;
   line-height: 1.08;
+  transition: color 0.2s ease;
 }
 
 .hero-copy span {
   display: block;
-  max-width: 280px;
+  /* max-width: 280px; */
   color: rgba(255, 255, 255, 0.82);
   font-size: 15px;
   line-height: 1.5;
+  transition: color 0.2s ease;
 }
 
 .exchange-shell {
@@ -122,6 +124,10 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1.1;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
 }
 
 .mode-tab.active {
@@ -162,6 +168,7 @@
   font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
+  transition: color 0.2s ease;
 }
 
 .card-heading > span {
@@ -263,6 +270,14 @@
   font-size: 17px;
   font-weight: 850;
   box-shadow: 0 14px 26px rgba(47, 141, 245, 0.24);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.exchange-button:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 .exchange-button:disabled {

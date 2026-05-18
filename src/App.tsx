@@ -2,9 +2,45 @@ import { useMemo, useState } from 'react'
 import './App.css'
 
 const availableFtc = 10000
+const modes = {
+  exchange: {
+    actionText: '立即兑换',
+    balanceLabel: '可用',
+    cardEyebrow: '当前兑换价',
+    cardTitle: '1 FTC = 1 DW20',
+    heroEyebrow: '资产兑换',
+    heroTitle: 'FTC 兑换 DW20',
+    heroSubtitle: '将 FTC 资产兑换成 DW20 并存入无链钱包',
+    inputLabel: '输入兑换数量',
+    outputLabel: '可获得',
+    outputToken: 'DW20',
+    placeholder: '最小兑换 1',
+    recordTitle: '兑换记录',
+    tabLabel: '奖金币兑换',
+  },
+  wallet: {
+    actionText: '存入钱包',
+    balanceLabel: '可提',
+    cardEyebrow: '存入比例',
+    cardTitle: '1 FTC = 1 DW20',
+    heroEyebrow: '奖金存入',
+    heroTitle: '存入无链钱包',
+    heroSubtitle: '将您的 FTC 奖金资产提现到无链钱包',
+    inputLabel: '输入存入数量',
+    outputLabel: '预计到账',
+    outputToken: 'DW20',
+    placeholder: '最小存入 1',
+    recordTitle: '存入记录',
+    tabLabel: '奖金存入钱包',
+  },
+} as const
+
+type Mode = keyof typeof modes
 
 function App() {
   const [amount, setAmount] = useState('')
+  const [activeMode, setActiveMode] = useState<Mode>('exchange')
+  const mode = modes[activeMode]
 
   const receiveAmount = useMemo(() => {
     const value = Number(amount)
@@ -17,6 +53,10 @@ function App() {
   }, [amount])
 
   const canExchange = Number(receiveAmount) >= 1
+  const switchMode = (nextMode: Mode) => {
+    setActiveMode(nextMode)
+    setAmount('')
+  }
 
   return (
     <main className="exchange-page">
@@ -29,43 +69,55 @@ function App() {
         </header>
 
         <div className="hero-copy">
-          <p>资产兑换</p>
-          <h2>FTC 兑换 DW20</h2>
-          <span>将 FTC 资产兑换成 DW20 并存入无链钱包</span>
+          <p>{mode.heroEyebrow}</p>
+          <h2>{mode.heroTitle}</h2>
+          <span>{mode.heroSubtitle}</span>
         </div>
       </section>
 
       <section className="exchange-shell" aria-labelledby="exchange-title">
         <nav className="mode-tabs" aria-label="兑换模式">
-          <button className="mode-tab active" type="button">
-            奖金币兑换
+          <button
+            className={`mode-tab ${activeMode === 'exchange' ? 'active' : ''}`}
+            type="button"
+            aria-pressed={activeMode === 'exchange'}
+            onClick={() => switchMode('exchange')}
+          >
+            {modes.exchange.tabLabel}
           </button>
-          <button className="mode-tab" type="button">
-            奖金存入钱包
+          <button
+            className={`mode-tab ${activeMode === 'wallet' ? 'active' : ''}`}
+            type="button"
+            aria-pressed={activeMode === 'wallet'}
+            onClick={() => switchMode('wallet')}
+          >
+            {modes.wallet.tabLabel}
           </button>
         </nav>
 
         <div className="exchange-card">
           <div className="card-heading">
             <div>
-              <p>当前兑换价</p>
-              <h2 id="exchange-title">1 FTC = 1 DW20</h2>
+              <p>{mode.cardEyebrow}</p>
+              <h2 id="exchange-title">{mode.cardTitle}</h2>
             </div>
             <span>实时</span>
           </div>
 
           <div className="field-row">
             <label className="field-label" htmlFor="ftc-amount">
-              输入兑换数量
+              {mode.inputLabel}
             </label>
-            <span>可用 {availableFtc.toLocaleString()} FTC</span>
+            <span>
+              {mode.balanceLabel} {availableFtc.toLocaleString()} FTC
+            </span>
           </div>
           <div className="amount-field">
             <input
               id="ftc-amount"
               inputMode="decimal"
               min="1"
-              placeholder="最小兑换 1"
+              placeholder={mode.placeholder}
               type="number"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -75,20 +127,20 @@ function App() {
 
           <div className="field-row">
             <label className="field-label" htmlFor="dw20-amount">
-              可获得
+              {mode.outputLabel}
             </label>
           </div>
           <div className="receive-field">
             <output id="dw20-amount">{receiveAmount || '0'}</output>
-            <strong>DW20</strong>
+            <strong>{mode.outputToken}</strong>
           </div>
 
           <button className="exchange-button" disabled={!canExchange} type="button">
-            立即兑换
+            {mode.actionText}
           </button>
 
           <div className="record-heading">
-            <h2>兑换记录</h2>
+            <h2>{mode.recordTitle}</h2>
             <a href="#records">查看更多</a>
           </div>
 
