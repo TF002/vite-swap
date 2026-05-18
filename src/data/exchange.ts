@@ -8,13 +8,13 @@ export const modes = {
     cardTitle: '1 FTC = 1 DW20',
     heroEyebrow: '资产兑换',
     heroTitle: 'FTC 兑换 DW20',
-    heroSubtitle: '将 FTC 资产兑换成 DW20 并存入无链钱包',
+    heroSubtitle: '用 DW20 兑换猜奖币 FTC，即可参与竞猜',
     inputLabel: '输入兑换数量',
     outputLabel: '可获得',
     outputToken: 'DW20',
     placeholder: '最小兑换 1',
     recordTitle: '兑换记录',
-    tabLabel: '奖金币兑换',
+    tabLabel: '猜奖币兑换',
   },
   wallet: {
     actionText: '存入钱包',
@@ -35,7 +35,7 @@ export const modes = {
 
 export const recordTabs = [
   { label: '全部记录', value: 'all' },
-  { label: '奖金币兑换', value: 'exchange' },
+  { label: '猜奖币兑换', value: 'exchange' },
   { label: '奖金存入钱包', value: 'wallet' },
 ] as const
 
@@ -47,7 +47,7 @@ export const records = [
     received: '100,000 FTC',
     status: '成功',
     time: '2025-12-25 21:09:55',
-    title: '奖金币兑换',
+    title: '猜奖币兑换',
     type: 'exchange',
   },
   {
