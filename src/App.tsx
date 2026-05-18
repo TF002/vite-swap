@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import './App.css'
+import type { KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const availableFtc = 10000
 const modes = {
@@ -35,12 +35,82 @@ const modes = {
   },
 } as const
 
+const recordTabs = [
+  { label: '全部记录', value: 'all' },
+  { label: '奖金币兑换', value: 'exchange' },
+  { label: '奖金存入钱包', value: 'wallet' },
+] as const
+
+const records = [
+  {
+    amount: '100,000 DW20',
+    direction: 'DW20 → FTC',
+    rate: '1 DW20 = 1 FTC',
+    received: '100,000 FTC',
+    status: '成功',
+    time: '2025-12-25 21:09:55',
+    title: '奖金币兑换',
+    type: 'exchange',
+  },
+  {
+    amount: '100,000 FTC',
+    direction: 'FTC → DW20',
+    rate: '1 FTC = 1 DW20',
+    received: '100,000 DW20',
+    status: '成功',
+    time: '2025-12-25 21:09:55',
+    title: '奖金存入钱包',
+    type: 'wallet',
+  },
+  {
+    amount: '12,800 FTC',
+    direction: 'FTC → DW20',
+    rate: '1 FTC = 1 DW20',
+    received: '12,800 DW20',
+    status: '成功',
+    time: '2025-12-21 18:32:10',
+    title: '奖金存入钱包',
+    type: 'wallet',
+  },
+] as const
+
 type Mode = keyof typeof modes
+type Page = 'home' | 'records'
+type RecordFilter = (typeof recordTabs)[number]['value']
+type RecordItem = (typeof records)[number]
+
+const getPageFromLocation = (): Page =>
+  window.location.pathname === '/records' ? 'records' : 'home'
+
+const runOnKeyboardClick =
+  (handler: () => void, disabled = false) =>
+  (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled || (event.key !== 'Enter' && event.key !== ' ')) {
+      return
+    }
+
+    event.preventDefault()
+    handler()
+  }
 
 function App() {
   const [amount, setAmount] = useState('')
   const [activeMode, setActiveMode] = useState<Mode>('exchange')
+  const [page, setPage] = useState<Page>(() => getPageFromLocation())
+  const [recordFilter, setRecordFilter] = useState<RecordFilter>('all')
   const mode = modes[activeMode]
+
+  useEffect(() => {
+    const syncPageWithRoute = () => {
+      setPage(getPageFromLocation())
+    }
+
+    window.addEventListener('popstate', syncPageWithRoute)
+
+    return () => {
+      window.removeEventListener('popstate', syncPageWithRoute)
+    }
+  }, [])
 
   const receiveAmount = useMemo(() => {
     const value = Number(amount)
@@ -52,68 +122,208 @@ function App() {
     return String(value)
   }, [amount])
 
+  const visibleRecords = useMemo(() => {
+    if (recordFilter === 'all') {
+      return records
+    }
+
+    return records.filter((record) => record.type === recordFilter)
+  }, [recordFilter])
+
   const canExchange = Number(receiveAmount) >= 1
   const switchMode = (nextMode: Mode) => {
     setActiveMode(nextMode)
     setAmount('')
   }
 
-  return (
-    <main className="exchange-page">
-      <section className="hero-panel">
-        <header className="top-bar">
-          <button className="back-button" type="button" aria-label="返回">
-            <span aria-hidden="true"></span>
-          </button>
-          <h1>兑换</h1>
+  const navigateTo = (nextPage: Page) => {
+    const nextPath = nextPage === 'records' ? '/records' : '/'
+
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath)
+    }
+
+    setPage(nextPage)
+  }
+
+  const openRecords = () => {
+    setRecordFilter('all')
+    navigateTo('records')
+  }
+
+  const getTabClassName = (tabMode: Mode) =>
+    [
+      'relative z-10 flex min-h-10.5 items-center justify-center rounded-[14px]',
+      'border-0 bg-transparent px-3 text-[15px] leading-[1.1] font-bold',
+      'transition-colors duration-300 ease-out',
+      activeMode === tabMode ? 'text-white' : 'text-[#727b90]',
+    ].join(' ')
+
+  const getRecordTabClassName = (filter: RecordFilter) =>
+    [
+      'relative min-h-12 border-0 bg-transparent px-1 text-[15px] font-extrabold',
+      'transition-colors duration-200 after:absolute after:inset-x-4 after:bottom-0',
+      'after:h-0.75 after:rounded-full after:content-[\'\']',
+      recordFilter === filter
+        ? 'text-[#1f55ff] after:bg-[#1f55ff]'
+        : 'text-[#5d6472] after:bg-transparent',
+    ].join(' ')
+
+  const pageClassName =
+    'mx-auto min-h-svh w-full max-w-[430px] overflow-hidden bg-[#f6f7fb] text-[#172033] sm:my-4 sm:min-h-[calc(100svh-32px)] sm:rounded-[32px] sm:shadow-[0_24px_70px_rgba(23,32,51,0.18)]'
+  const recordsPageClassName =
+    'mx-auto flex h-svh w-full max-w-[430px] flex-col overflow-hidden bg-[#f6f7fb] text-[#172033] sm:my-4 sm:h-[calc(100svh-32px)] sm:rounded-[32px] sm:shadow-[0_24px_70px_rgba(23,32,51,0.18)]'
+
+  if (page === 'records') {
+    return (
+      <main className={recordsPageClassName}>
+        <header className="z-20 grid h-[58px] shrink-0 grid-cols-[56px_1fr_56px] items-center border-b border-[#edf0f6] bg-white/95 backdrop-blur-xl">
+          <div
+            className="ml-2 grid h-[42px] w-[42px] cursor-pointer place-items-center rounded-full border-0 bg-[#f3f5fa] p-0"
+            role="button"
+            tabIndex={0}
+            aria-label="返回首页"
+            onClick={() => navigateTo('home')}
+            onKeyDown={runOnKeyboardClick(() => navigateTo('home'))}
+          >
+            <span
+              className="h-3 w-3 rotate-45 border-b-[2.5px] border-l-[2.5px] border-[#172033]"
+              aria-hidden="true"
+            ></span>
+          </div>
+          <h1 className="m-0 text-center text-lg leading-none font-bold">兑换记录</h1>
         </header>
 
-        <div className="hero-copy">
-          <p>{mode.heroEyebrow}</p>
-          <h2>{mode.heroTitle}</h2>
-          <span>{mode.heroSubtitle}</span>
+        <nav
+          className="z-10 grid shrink-0 grid-cols-3 border-b border-[#dfe4ee] bg-white"
+          aria-label="记录分类"
+        >
+          {recordTabs.map((tab) => (
+            <div
+              className={getRecordTabClassName(tab.value)}
+              role="button"
+              tabIndex={0}
+              aria-pressed={recordFilter === tab.value}
+              key={tab.value}
+              onClick={() => setRecordFilter(tab.value)}
+              onKeyDown={runOnKeyboardClick(() => setRecordFilter(tab.value))}
+            >
+              {tab.label}
+            </div>
+          ))}
+        </nav>
+
+        <section className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          {visibleRecords.map((record) => (
+            <RecordCard key={`${record.type}-${record.time}`} record={record} />
+          ))}
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className={pageClassName}>
+      <section className="relative pb-[94px] text-white after:absolute after:right-[-78px] after:bottom-[-106px] after:h-[230px] after:w-[230px] after:rounded-full after:border-[34px] after:border-white/12 after:content-[''] bg-[radial-gradient(circle_at_85%_14%,rgba(255,255,255,0.34),transparent_28%),linear-gradient(145deg,#7857e6_0%,#4f7df1_48%,#24b8d5_100%)]">
+        <header className="relative z-10 grid h-[58px] grid-cols-[56px_1fr_56px] items-center">
+          <div
+            className="ml-2 grid h-[42px] w-[42px] cursor-pointer place-items-center rounded-full border-0 bg-white/14 p-0"
+            role="button"
+            tabIndex={0}
+            aria-label="返回"
+          >
+            <span
+              className="h-3 w-3 rotate-45 border-b-[2.5px] border-l-[2.5px] border-white"
+              aria-hidden="true"
+            ></span>
+          </div>
+          <h1 className="m-0 text-center text-lg leading-none font-semibold">兑换</h1>
+        </header>
+
+        <div className="relative z-10 pt-[18px] pr-0 pb-0 pl-6">
+          <p className="mb-2 text-sm font-semibold text-white/78">
+            {mode.heroEyebrow}
+          </p>
+          <h2 className="mb-[11px] text-[31px] leading-[1.08] font-extrabold transition-colors duration-200">
+            {mode.heroTitle}
+          </h2>
+          <span className="block text-[15px] leading-normal text-white/82 transition-colors duration-200">
+            {mode.heroSubtitle}
+          </span>
         </div>
       </section>
 
-      <section className="exchange-shell" aria-labelledby="exchange-title">
-        <nav className="mode-tabs" aria-label="兑换模式">
-          <button
-            className={`mode-tab ${activeMode === 'exchange' ? 'active' : ''}`}
-            type="button"
+      <section
+        className="relative z-10 -mt-[70px] px-[18px] pb-7"
+        aria-labelledby="exchange-title"
+      >
+        <nav
+          className="relative mb-3.5 grid grid-cols-2 gap-1.5 overflow-hidden rounded-[18px] border border-[rgba(117,126,150,0.14)] bg-white/88 p-[5px] shadow-[0_16px_36px_rgba(40,56,91,0.12)] backdrop-blur-[18px]"
+          aria-label="兑换模式"
+        >
+          <div
+            className={[
+              'absolute top-[5px] bottom-[5px] left-[5px] w-[calc((100%-16px)/2)]',
+              'rounded-[14px] bg-[#172033] shadow-[0_10px_22px_rgba(23,32,51,0.2)]',
+              'transition-transform duration-300 ease-out',
+              activeMode === 'wallet' ? 'translate-x-[calc(100%+6px)]' : 'translate-x-0',
+            ].join(' ')}
+            aria-hidden="true"
+          ></div>
+          <div
+            className={getTabClassName('exchange')}
+            role="button"
+            tabIndex={0}
             aria-pressed={activeMode === 'exchange'}
             onClick={() => switchMode('exchange')}
+            onKeyDown={runOnKeyboardClick(() => switchMode('exchange'))}
           >
             {modes.exchange.tabLabel}
-          </button>
-          <button
-            className={`mode-tab ${activeMode === 'wallet' ? 'active' : ''}`}
-            type="button"
+          </div>
+          <div
+            className={getTabClassName('wallet')}
+            role="button"
+            tabIndex={0}
             aria-pressed={activeMode === 'wallet'}
             onClick={() => switchMode('wallet')}
+            onKeyDown={runOnKeyboardClick(() => switchMode('wallet'))}
           >
             {modes.wallet.tabLabel}
-          </button>
+          </div>
         </nav>
 
-        <div className="exchange-card">
-          <div className="card-heading">
+        <div className="rounded-3xl border border-[rgba(117,126,150,0.12)] bg-white p-5 shadow-[0_18px_42px_rgba(36,48,76,0.1)]">
+          <div className="mb-6 flex items-start justify-between gap-4 rounded-[20px] bg-linear-to-br from-[#f4f8ff] to-[#effcf9] p-[18px]">
             <div>
-              <p>{mode.cardEyebrow}</p>
-              <h2 id="exchange-title">{mode.cardTitle}</h2>
+              <p className="mb-2 text-[13px] font-semibold text-[#7b8498]">
+                {mode.cardEyebrow}
+              </p>
+              <h2
+                className="m-0 text-[22px] leading-[1.1] font-extrabold text-[#172033] transition-colors duration-200"
+                id="exchange-title"
+              >
+                {mode.cardTitle}
+              </h2>
             </div>
-            <span>实时</span>
+            <span className="shrink-0 rounded-full bg-[rgba(35,181,148,0.12)] px-2.5 py-1.5 text-xs font-extrabold text-[#18a783]">
+              实时
+            </span>
           </div>
 
-          <div className="field-row">
-            <label className="field-label" htmlFor="ftc-amount">
+          <div className="mb-2.5 flex items-center justify-between gap-3">
+            <label
+              className="text-[15px] leading-tight font-extrabold text-[#172033]"
+              htmlFor="ftc-amount"
+            >
               {mode.inputLabel}
             </label>
-            <span>
+            <span className="whitespace-nowrap text-[13px] font-semibold text-[#8a92a6]">
               {mode.balanceLabel} {availableFtc.toLocaleString()} FTC
             </span>
           </div>
-          <div className="amount-field">
+          <div className="mb-[18px] grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-[18px] border border-[#e9edf5] bg-[#f8faff] px-4 focus-within:border-[rgba(79,125,241,0.42)] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(79,125,241,0.1)]">
             <input
+              className="min-w-0 border-0 bg-transparent text-2xl font-extrabold text-[#172033] outline-none placeholder:text-[#b6bdcb]"
               id="ftc-amount"
               inputMode="decimal"
               min="1"
@@ -122,40 +332,124 @@ function App() {
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
-            <strong>FTC</strong>
+            <strong className="text-[15px] font-black text-[#172033]">FTC</strong>
           </div>
 
-          <div className="field-row">
-            <label className="field-label" htmlFor="dw20-amount">
+          <div className="mb-2.5 flex items-center justify-between gap-3">
+            <label
+              className="text-[15px] leading-tight font-extrabold text-[#172033]"
+              htmlFor="dw20-amount"
+            >
               {mode.outputLabel}
             </label>
           </div>
-          <div className="receive-field">
-            <output id="dw20-amount">{receiveAmount || '0'}</output>
-            <strong>{mode.outputToken}</strong>
+          <div className="mb-6 grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-[18px] border border-transparent bg-[#f1f4f9] px-4">
+            <output
+              className="min-h-[30px] text-2xl font-black text-[#23b594]"
+              id="dw20-amount"
+            >
+              {receiveAmount || '0'}
+            </output>
+            <strong className="text-[15px] font-black text-[#172033]">
+              {mode.outputToken}
+            </strong>
           </div>
 
-          <button className="exchange-button" disabled={!canExchange} type="button">
+          <div
+            className={[
+              'mt-0.5 mb-7 grid min-h-[52px] w-full place-items-center rounded-[18px]',
+              'border-0 text-[17px] font-[850] transition-[background,box-shadow,transform]',
+              'duration-200 active:translate-y-px',
+              canExchange
+                ? 'cursor-pointer bg-linear-to-br from-[#35c4a0] to-[#2f8df5] text-white shadow-[0_14px_26px_rgba(47,141,245,0.24)]'
+                : 'cursor-not-allowed bg-[#e2e6ee] text-[#a5adbd] shadow-none',
+            ].join(' ')}
+            role="button"
+            tabIndex={canExchange ? 0 : -1}
+            aria-disabled={!canExchange}
+            onClick={() => {
+              if (!canExchange) {
+                return
+              }
+            }}
+            onKeyDown={runOnKeyboardClick(() => undefined, !canExchange)}
+          >
             {mode.actionText}
-          </button>
-
-          <div className="record-heading">
-            <h2>{mode.recordTitle}</h2>
-            <a href="#records">查看更多</a>
           </div>
 
-          <div className="empty-record" id="records">
-            <svg viewBox="0 0 80 80" role="presentation" aria-hidden="true">
+          <div className="mb-3.5 flex items-center justify-between">
+            <h2 className="m-0 text-lg leading-[1.1] font-[850] text-[#172033]">
+              {mode.recordTitle}
+            </h2>
+            <div
+              className="cursor-pointer border-0 bg-transparent p-0 text-sm leading-[1.1] font-extrabold text-[#4f7df1] after:ml-[3px] after:content-['›']"
+              role="button"
+              tabIndex={0}
+              onClick={openRecords}
+              onKeyDown={runOnKeyboardClick(openRecords)}
+            >
+              查看更多
+            </div>
+          </div>
+
+          <div
+            className="grid min-h-[132px] place-items-center content-center rounded-[18px] border border-dashed border-[#d9deea] bg-[#fbfcff] text-[#8a92a6]"
+            id="records"
+          >
+            <svg
+              className="mb-1 h-14 w-14 fill-none stroke-[#c3cbe0] stroke-[3] [stroke-linecap:round] [stroke-linejoin:round]"
+              viewBox="0 0 80 80"
+              role="presentation"
+              aria-hidden="true"
+            >
               <path d="M24 31h32l5 13v18H19V44l5-13Z" />
               <path d="M29 37h22l3 8H26l3-8Z" />
               <path d="M19 44h14c2 5 12 5 14 0h14" />
               <path d="M31 26h18M36 19h8M24 22l-5-5M56 22l5-5" />
             </svg>
-            <p>暂无数据</p>
+            <p className="m-0 text-[15px] leading-tight font-semibold">暂无数据</p>
           </div>
         </div>
       </section>
     </main>
+  )
+}
+
+function RecordCard({ record }: { record: RecordItem }) {
+  return (
+    <article className="overflow-hidden rounded-[22px] border border-[#edf0f6] bg-white shadow-[0_14px_32px_rgba(36,48,76,0.08)]">
+      <header className="flex items-center gap-2 border-b border-[#f0f2f7] px-4 py-4">
+        <span className="h-6 w-1.5 rounded-full bg-[#24a9e8]"></span>
+        <h2 className="m-0 text-base font-extrabold text-[#172033]">
+          {record.title}
+        </h2>
+      </header>
+
+      <dl className="grid gap-5 px-5 py-5">
+        <RecordRow label="兑换方向" value={record.direction} />
+        <RecordRow label="兑换数量" value={record.amount} />
+        <RecordRow label="获得数量" value={record.received} />
+        <RecordRow label="汇率" value={record.rate} />
+        <RecordRow label="时间" value={record.time} />
+        <div className="grid grid-cols-[96px_1fr] items-center gap-4">
+          <dt className="text-[15px] font-bold text-[#6f7788]">状态</dt>
+          <dd className="m-0 text-right text-[15px] font-black text-[#24a148]">
+            {record.status}
+          </dd>
+        </div>
+      </dl>
+    </article>
+  )
+}
+
+function RecordRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[96px_1fr] items-center gap-4">
+      <dt className="text-[15px] font-bold text-[#6f7788]">{label}</dt>
+      <dd className="m-0 text-right text-[15px] font-black text-[#222b3d]">
+        {value}
+      </dd>
+    </div>
   )
 }
 
