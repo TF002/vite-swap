@@ -21,7 +21,7 @@ export const modes = {
   wallet: {
     actionText: '存入钱包',
     balanceLabel: '可提',
-    cardEyebrow: '存入比例',
+    cardEyebrow: '当前兑换价',
     cardTitle: '1 FTC = 1 DW20',
     confirmAmountLabel: '存入数量',
     heroEyebrow: '奖金存入',
