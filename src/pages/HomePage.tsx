@@ -201,7 +201,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         const opt = {
             receiverId: "dw20-lock.contract",
             sender_account_id: "1002159596.user",
-            actions:  {
+            actions:  [{
                     method_name: "deposit",
                     args: {
 						evm_address: "0x61e026f9ad0af11c2900ada0d59b9dd32f023e98"
@@ -210,7 +210,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     amount: "100000000000000000000000000",
                     symbol: "TDW20",
                     fee_symbol: "TDW20",
-                },
+                }],
         };
 //         let opt = {
 //   "receiverId": "dw20-staking-pool.contract",
@@ -240,7 +240,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
 
-        let contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
+        const contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
         console.log("sendContractTxRaw", contractMethod);
 
         if (contractMethod.success && !contractMethod.error) {
