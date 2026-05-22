@@ -33,11 +33,45 @@ type AccountResponse = {
 
 type NoChainProvider = InstanceType<typeof miniProgramApi.BrowserProvider>;
 
+type ExchangePreviewRecord = {
+    chainless_tx_hash: string;
+    wulian_account: string;
+    evm_address: string;
+    amount: string;
+    deposit_time: number;
+    deposit_seq: number;
+};
+
+type ExchangePreviewResponse = {
+    items: ExchangePreviewRecord[];
+};
+
+const evmAddress = "0x61e026f9ad0af11c2900ada0d59b9dd32f023e98";
+const exchangePreviewUrl = `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${evmAddress}&page=1&page_size=5`;
+let exchangePreviewRequest: Promise<ExchangePreviewResponse> | null = null;
+
+async function fetchExchangePreviewRecords() {
+    if (!exchangePreviewRequest) {
+        exchangePreviewRequest = axios
+            .get<ExchangePreviewResponse>(exchangePreviewUrl)
+            .then((response) => response.data)
+            .finally(() => {
+                exchangePreviewRequest = null;
+            });
+    }
+
+    return exchangePreviewRequest;
+}
+
 function HomePage({ onOpenRecords }: HomePageProps) {
     const [amount, setAmount] = useState("");
     const [activeMode, setActiveMode] = useState<Mode>("exchange");
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [dw20AvailableBalance, setDw20AvailableBalance] = useState("0");
+    const [exchangePreviewRecords, setExchangePreviewRecords] = useState<
+        ExchangePreviewRecord[]
+    >([]);
+    const [isExchangePreviewLoading, setIsExchangePreviewLoading] = useState(false);
     const noChainProvider = useRef<NoChainProvider | null>(null);
     const mode = modes[activeMode];
     const feeAmount = 10;
@@ -110,6 +144,42 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             }
         };
     }, []);
+
+    useEffect(() => {
+        if (activeMode !== "exchange") {
+            return;
+        }
+
+        let isMounted = true;
+
+        const loadExchangePreviewRecords = async () => {
+            try {
+                setIsExchangePreviewLoading(true);
+                const response = await fetchExchangePreviewRecords();
+
+                console.log("exchange preview records:", response);
+
+                if (isMounted) {
+                    setExchangePreviewRecords(response.items ?? []);
+                }
+            } catch (error) {
+                console.error("exchange preview records request failed:", error);
+                if (isMounted) {
+                    setExchangePreviewRecords([]);
+                }
+            } finally {
+                if (isMounted) {
+                    setIsExchangePreviewLoading(false);
+                }
+            }
+        };
+
+        void loadExchangePreviewRecords();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [activeMode]);
 
     const maxInputAmount = useMemo(() => {
         if (activeMode === "exchange") {
@@ -451,25 +521,12 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                         </div>
                     </div>
 
-                    <div
-                        className="grid min-h-[132px] place-items-center content-center rounded-[18px] border border-dashed border-[#d9deea] bg-[#fbfcff] text-[#8a92a6]"
-                        id="records"
-                    >
-                        <svg
-                            className="mb-1 h-14 w-14 fill-none stroke-[#c3cbe0] stroke-[3] [stroke-linecap:round] [stroke-linejoin:round]"
-                            viewBox="0 0 80 80"
-                            role="presentation"
-                            aria-hidden="true"
-                        >
-                            <path d="M24 31h32l5 13v18H19V44l5-13Z" />
-                            <path d="M29 37h22l3 8H26l3-8Z" />
-                            <path d="M19 44h14c2 5 12 5 14 0h14" />
-                            <path d="M31 26h18M36 19h8M24 22l-5-5M56 22l5-5" />
-                        </svg>
-                        <p className="m-0 text-[15px] leading-tight font-semibold">
-                            暂无数据
-                        </p>
-                    </div>
+                    <ExchangePreviewList
+                        records={activeMode === "exchange" ? exchangePreviewRecords : []}
+                        isLoading={
+                            activeMode === "exchange" && isExchangePreviewLoading
+                        }
+                    />
                 </div>
             </section>
 
@@ -489,6 +546,88 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                 />
             )}
         </main>
+    );
+}
+
+function ExchangePreviewList({
+    records,
+    isLoading,
+}: {
+    records: ExchangePreviewRecord[];
+    isLoading: boolean;
+}) {
+    if (isLoading) {
+        return (
+            <div
+                className="grid min-h-[132px] place-items-center rounded-[18px] border border-dashed border-[#d9deea] bg-[#fbfcff] text-[15px] font-semibold text-[#8a92a6]"
+                id="records"
+            >
+                正在加载记录...
+            </div>
+        );
+    }
+
+    if (records.length === 0) {
+        return <HomeEmptyRecords />;
+    }
+
+    return (
+        <div
+            className="space-y-2.5 rounded-[18px] border border-[#e9edf5] bg-[#fbfcff] p-2.5"
+            id="records"
+        >
+            {records.map((record) => (
+                <div
+                    className="rounded-[14px] bg-white px-3.5 py-3 shadow-[0_8px_22px_rgba(36,48,76,0.06)]"
+                    key={`${record.chainless_tx_hash}-${record.deposit_seq}`}
+                >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <strong className="text-sm font-black text-[#172033]">
+                            DW20 → FTC
+                        </strong>
+                        <span className="rounded-full bg-[#eaf8f4] px-2 py-0.5 text-[11px] font-black text-[#23a57f]">
+                            成功
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                        <span className="text-[#8a92a6]">兑换数量</span>
+                        <span className="text-right text-[#222b3d]">
+                            {formatTokenAmount(record.amount)} DW20
+                        </span>
+                        <span className="text-[#8a92a6]">获得数量</span>
+                        <span className="text-right text-[#222b3d]">
+                            {formatTokenAmount(record.amount)} FTC
+                        </span>
+                        <span className="text-[#8a92a6]">时间</span>
+                        <span className="text-right text-[#222b3d]">
+                            {formatTimestamp(record.deposit_time)}
+                        </span>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function HomeEmptyRecords() {
+    return (
+        <div
+            className="grid min-h-[132px] place-items-center content-center rounded-[18px] border border-dashed border-[#d9deea] bg-[#fbfcff] text-[#8a92a6]"
+            id="records"
+        >
+            <svg
+                className="mb-1 h-14 w-14 fill-none stroke-[#c3cbe0] stroke-[3] [stroke-linecap:round] [stroke-linejoin:round]"
+                viewBox="0 0 80 80"
+                role="presentation"
+                aria-hidden="true"
+            >
+                <path d="M24 31h32l5 13v18H19V44l5-13Z" />
+                <path d="M29 37h22l3 8H26l3-8Z" />
+                <path d="M19 44h14c2 5 12 5 14 0h14" />
+                <path d="M31 26h18M36 19h8M24 22l-5-5M56 22l5-5" />
+            </svg>
+            <p className="m-0 text-[15px] leading-tight font-semibold">暂无数据</p>
+        </div>
     );
 }
 
@@ -614,6 +753,43 @@ function ConfirmRow({
             </strong>
         </div>
     );
+}
+
+function formatTokenAmount(amount: string) {
+    try {
+        const value = BigInt(amount);
+        const base = 10n ** 18n;
+        const integer = value / base;
+        const fraction = value % base;
+
+        if (fraction === 0n) {
+            return integer.toLocaleString();
+        }
+
+        const fractionText = fraction.toString().padStart(18, "0").replace(/0+$/, "");
+
+        return `${integer.toLocaleString()}.${fractionText}`;
+    } catch {
+        return amount;
+    }
+}
+
+function formatTimestamp(timestamp: number) {
+    if (!timestamp) {
+        return "-";
+    }
+
+    return new Date(timestamp * 1000)
+        .toLocaleString("zh-CN", {
+            hour12: false,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+        })
+        .replace(/\//g, "-");
 }
 
 export default HomePage;
