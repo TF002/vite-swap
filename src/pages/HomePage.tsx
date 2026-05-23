@@ -57,7 +57,129 @@ type ExchangePreviewResponse = {
     items: ExchangePreviewRecord[];
 };
 
+type DepositStatusResponse = {
+    status?: string;
+};
+
+type RpcResponse = {
+    status?: number;
+    result?: {
+        fees?: Array<string | bigint | number>;
+        result?: {
+            fees?: Array<string | bigint | number>;
+        };
+    };
+};
+
 const exchangePreviewRequests = new Map<string, Promise<ExchangePreviewResponse>>();
+const rpcUrl = import.meta.env.DEV
+    ? "/rpc"
+    : "https://rpc-testnet.chainlessdw20.com/";
+
+const wait = (delay: number) =>
+    new Promise((resolve) => {
+        window.setTimeout(resolve, delay);
+    });
+
+function parseNearAmount(amountText: string) {
+    const [integerPart = "0", fractionPart = ""] = amountText.trim().split(".");
+    const normalizedInteger = integerPart.replace(/\D/g, "") || "0";
+    const normalizedFraction = fractionPart.replace(/\D/g, "").slice(0, 24);
+    const paddedFraction = normalizedFraction.padEnd(24, "0");
+
+    return `${BigInt(normalizedInteger) * 10n ** 24n + BigInt(paddedFraction)}`;
+}
+
+function formatNearAmount(amountText: string) {
+    const value = BigInt(amountText);
+    const base = 10n ** 24n;
+    const integer = value / base;
+    const fraction = value % base;
+
+    if (fraction === 0n) {
+        return integer.toString();
+    }
+
+    const fractionText = fraction.toString().padStart(24, "0").replace(/0+$/, "");
+
+    return `${integer}.${fractionText}`;
+}
+
+async function estimateTransferFee({
+    accountId,
+    amount,
+    receiverId,
+}: {
+    accountId: string;
+    amount: string;
+    receiverId: string;
+}) {
+    try {
+        const response = await axios.post<RpcResponse>(
+            rpcUrl,
+            {
+                jsonrpc: "2.0",
+                id: "dontcare",
+                method: "query",
+                params: {
+                    request_type: "transfer_fee",
+                    finality: "final",
+                    account_id: accountId,
+                    receiver_id: receiverId,
+                    symbol: "TDW20",
+                    amount: parseNearAmount(amount),
+                    fee_symbol: ["TDW20"],
+                },
+            },
+            {
+                headers: { rpc: "true" },
+                timeout: 50000,
+            },
+        );
+
+        const rawFee =
+            response.data.result?.fees?.[0] ??
+            response.data.result?.result?.fees?.[0] ??
+            "0";
+        const feeString = typeof rawFee === "bigint" ? rawFee.toString() : String(rawFee);
+        const formattedFee = formatNearAmount(feeString);
+        const fee = Math.ceil(Number.parseFloat(formattedFee));
+
+        return Number.isFinite(fee) ? fee : 0;
+    } catch (error) {
+        console.error("estimate transfer fee failed:", error);
+        return 0;
+    }
+}
+
+async function pollDepositStatus(chainlessTxHash: string) {
+    const depositStatusUrl = `http://mmt-user.budingcc.cc/pub/bridge/deposit?chainless_tx_hash=${encodeURIComponent(chainlessTxHash)}`;
+
+    for (let retryCount = 0; retryCount < 40; retryCount += 1) {
+        try {
+            const response = await axios.get<DepositStatusResponse>(depositStatusUrl);
+            const status = response.data.status ?? "";
+
+            console.log("deposit status response:", response.data);
+
+            if (status === "success") {
+                return true;
+            }
+
+            if (status === "error") {
+                return false;
+            }
+        } catch (error) {
+            console.error("deposit status request failed:", error);
+        }
+
+        if (retryCount < 39) {
+            await wait(700);
+        }
+    }
+
+    return false;
+}
 
 async function fetchExchangePreviewRecords(walletAddress: string) {
     const exchangePreviewUrl = `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=1&page_size=5`;
@@ -83,7 +205,9 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     const [amount, setAmount] = useState("");
     const [activeMode, setActiveMode] = useState<Mode>("exchange");
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isEstimatingFee, setIsEstimatingFee] = useState(false);
     const [isSubmittingExchange, setIsSubmittingExchange] = useState(false);
+    const [estimatedFeeAmount, setEstimatedFeeAmount] = useState(0);
     const [dw20AvailableBalance, setDw20AvailableBalance] = useState("0");
     const [exchangePreviewRecords, setExchangePreviewRecords] = useState<
         ExchangePreviewRecord[]
@@ -96,7 +220,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     const [hasCheckedWallet, setHasCheckedWallet] = useState(false);
     const noChainProvider = useRef<NoChainProvider | null>(null);
     const mode = modes[activeMode];
-    const feeAmount = 10;
+    const receiverId = "dw20-lock.contract";
 
     useEffect(() => {
         let isMounted = true;
@@ -301,11 +425,11 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         const value = Number(paymentAmount);
 
         if (!Number.isFinite(value) || value <= 0) {
-            return feeAmount;
+            return estimatedFeeAmount;
         }
 
-        return value + feeAmount;
-    }, [paymentAmount]);
+        return value + estimatedFeeAmount;
+    }, [estimatedFeeAmount, paymentAmount]);
 
     const canExchange = Number(receiveAmount) >= 1;
     const switchMode = (nextMode: Mode) => {
@@ -316,6 +440,33 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         setActiveMode(nextMode);
         setAmount("");
         setIsConfirmOpen(false);
+        setEstimatedFeeAmount(0);
+    };
+
+    const openConfirmDialog = async () => {
+        if (!canExchange || isSubmittingExchange || isEstimatingFee) {
+            return;
+        }
+
+        if (!walletAccountId) {
+            message.warning("钱包账号未初始化");
+            return;
+        }
+
+        setIsEstimatingFee(true);
+
+        try {
+            const fee = await estimateTransferFee({
+                accountId: walletAccountId,
+                amount: paymentAmount,
+                receiverId,
+            });
+
+            setEstimatedFeeAmount(fee);
+            setIsConfirmOpen(true);
+        } finally {
+            setIsEstimatingFee(false);
+        }
     };
 
     const sendContractMethod = async () => {
@@ -335,9 +486,9 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         }
 
         const opt = {
-            receiverId: "dw20-lock.contract",
+            receiverId,
             sender_account_id: walletAccountId,
-            actions:  {
+            actions:  [{
                     method_name: "deposit",
                     args: {
 						evm_address: walletAddress
@@ -346,7 +497,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     amount: "100000000000000000000000000",
                     symbol: "TDW20",
                     fee_symbol: "TDW20",
-                },
+                }],
         };
 //         let opt = {
 //   "receiverId": "dw20-staking-pool.contract",
@@ -403,7 +554,14 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             });
             console.log("getHash", getHash);
 
-            if (getHash.success && getHash.data.success) {
+            if (!getHash.success || !getHash.data.success) {
+                message.error("交易确认失败，请重试");
+                return false;
+            }
+
+            const isDepositSuccess = await pollDepositStatus(sendTxraw.data.hash);
+
+            if (isDepositSuccess) {
                 console.log("合约流程走完毕!");
                 return true;
             }
@@ -600,24 +758,24 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                             "mt-0.5 mb-7 grid min-h-[52px] w-full place-items-center rounded-[18px]",
                             "border-0 text-[17px] font-[850] transition-[background,box-shadow,transform]",
                             "duration-200 active:translate-y-px",
-                            canExchange && !isSubmittingExchange
+                            canExchange && !isSubmittingExchange && !isEstimatingFee
                                 ? "cursor-pointer bg-linear-to-br from-[#35c4a0] to-[#2f8df5] text-white shadow-[0_14px_26px_rgba(47,141,245,0.24)]"
                                 : "cursor-not-allowed bg-[#e2e6ee] text-[#a5adbd] shadow-none",
                         ].join(" ")}
                         role="button"
-                        tabIndex={canExchange && !isSubmittingExchange ? 0 : -1}
-                        aria-disabled={!canExchange || isSubmittingExchange}
+                        tabIndex={canExchange && !isSubmittingExchange && !isEstimatingFee ? 0 : -1}
+                        aria-disabled={!canExchange || isSubmittingExchange || isEstimatingFee}
                         onClick={() => {
-                            if (canExchange && !isSubmittingExchange) {
-                                setIsConfirmOpen(true);
-                            }
+                            void openConfirmDialog();
                         }}
                         onKeyDown={runOnKeyboardClick(
-                            () => setIsConfirmOpen(true),
-                            !canExchange || isSubmittingExchange,
+                            () => {
+                                void openConfirmDialog();
+                            },
+                            !canExchange || isSubmittingExchange || isEstimatingFee,
                         )}
                     >
-                        {mode.actionText}
+                        {isEstimatingFee ? "预估手续费中..." : mode.actionText}
                     </div>
 
                     <div className="mb-3.5 flex items-center justify-between">
@@ -646,7 +804,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
             {isConfirmOpen && (
                 <ConfirmDialog
-                    feeAmount={feeAmount}
+                    feeAmount={estimatedFeeAmount}
                     amountLabel={mode.confirmAmountLabel}
                     modeLabel={activeMode === "wallet" ? "确认存入" : "确认兑换"}
                     paymentAmount={paymentAmount}
@@ -763,13 +921,13 @@ function SubmittingOverlay() {
             role="alert"
             aria-live="assertive"
         >
-            <div className="grid h-[190px] w-[190px] place-items-center rounded-[28px] bg-[#3f3f3f]/92 text-white shadow-[0_22px_70px_rgba(15,23,42,0.28)]">
+            <div className="grid h-[160px] w-[160px] place-items-center rounded-[28px] bg-[#3f3f3f]/92 text-white shadow-[0_22px_70px_rgba(15,23,42,0.28)]">
                 <div className="flex flex-col items-center">
                     <span
-                        className="mb-7 h-[58px] w-[58px] animate-spin rounded-full border-[5px] border-white/20 border-t-white"
+                        className="mb-7 h-[40px] w-[40px] animate-spin rounded-full border-[5px] border-white/20 border-t-white"
                         aria-hidden="true"
                     ></span>
-                    <p className="m-0 text-[30px] leading-none font-medium tracking-normal">
+                    <p className="m-0 text-[22px] leading-none font-medium tracking-normal">
                         提交质押中..
                     </p>
                 </div>
@@ -812,7 +970,7 @@ function ConfirmDialog({
             }}
         >
             <section
-                className="w-full max-w-[390px] rounded-t-[30px] bg-white p-5 shadow-[0_-24px_70px_rgba(15,23,42,0.24)] [animation:confirm-sheet-in_220ms_ease-out] sm:rounded-[30px]"
+                className="w-full  rounded-t-[30px] bg-white p-5 shadow-[0_-24px_70px_rgba(15,23,42,0.24)] [animation:confirm-sheet-in_220ms_ease-out] sm:rounded-[30px]"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="confirm-title"
