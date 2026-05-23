@@ -3,15 +3,15 @@ import { message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableAmount, modes, type Mode } from "../data/exchange";
 import { runOnKeyboardClick } from "../lib/keyboard";
+import {
+    fetchWalletInfo,
+    getStoredWalletAccountId,
+    getStoredWalletAddress,
+} from "../lib/wallet";
 import * as miniProgramApi from "mini-program-api";
 
 type HomePageProps = {
     onOpenRecords: () => void;
-};
-
-type WalletResponse = {
-    walletAddress: string;
-    status: "success" | "NoRegistered" | string;
 };
 
 type NoChainWindow = Window & {
@@ -28,6 +28,13 @@ type AccountResponse = {
     success?: boolean;
     data?: {
         balance?: AccountBalance[];
+    };
+};
+
+type AuthResponse = {
+    success?: boolean;
+    data?: {
+        accountId?: string;
     };
 };
 
@@ -50,32 +57,43 @@ type ExchangePreviewResponse = {
     items: ExchangePreviewRecord[];
 };
 
-const evmAddress = "0x61e026f9ad0af11c2900ada0d59b9dd32f023e98";
-const exchangePreviewUrl = `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${evmAddress}&page=1&page_size=5`;
-let exchangePreviewRequest: Promise<ExchangePreviewResponse> | null = null;
+const exchangePreviewRequests = new Map<string, Promise<ExchangePreviewResponse>>();
 
-async function fetchExchangePreviewRecords() {
-    if (!exchangePreviewRequest) {
-        exchangePreviewRequest = axios
-            .get<ExchangePreviewResponse>(exchangePreviewUrl)
-            .then((response) => response.data)
-            .finally(() => {
-                exchangePreviewRequest = null;
-            });
+async function fetchExchangePreviewRecords(walletAddress: string) {
+    const exchangePreviewUrl = `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=1&page_size=5`;
+    const existingRequest = exchangePreviewRequests.get(exchangePreviewUrl);
+
+    if (existingRequest) {
+        return existingRequest;
     }
 
-    return exchangePreviewRequest;
+    const request = axios
+        .get<ExchangePreviewResponse>(exchangePreviewUrl)
+        .then((response) => response.data)
+        .finally(() => {
+            exchangePreviewRequests.delete(exchangePreviewUrl);
+        });
+
+    exchangePreviewRequests.set(exchangePreviewUrl, request);
+
+    return request;
 }
 
 function HomePage({ onOpenRecords }: HomePageProps) {
     const [amount, setAmount] = useState("");
     const [activeMode, setActiveMode] = useState<Mode>("exchange");
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isSubmittingExchange, setIsSubmittingExchange] = useState(false);
     const [dw20AvailableBalance, setDw20AvailableBalance] = useState("0");
     const [exchangePreviewRecords, setExchangePreviewRecords] = useState<
         ExchangePreviewRecord[]
     >([]);
     const [isExchangePreviewLoading, setIsExchangePreviewLoading] = useState(false);
+    const [walletAccountId, setWalletAccountId] = useState(() =>
+        getStoredWalletAccountId(),
+    );
+    const [walletAddress, setWalletAddress] = useState(() => getStoredWalletAddress());
+    const [hasCheckedWallet, setHasCheckedWallet] = useState(false);
     const noChainProvider = useRef<NoChainProvider | null>(null);
     const mode = modes[activeMode];
     const feeAmount = 10;
@@ -83,22 +101,6 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     useEffect(() => {
         let isMounted = true;
         let retryTimer: number | undefined;
-
-        const fetchWallet = async () => {
-            try {
-                const response = await axios.get<WalletResponse>(
-                    "http://mmt-user.budingcc.cc/pub/wallet/wulian?userId=1002159596.user",
-                );
-
-                console.log("wulian wallet response:", response.data);
-
-                if (response.data.status === "NoRegistered") {
-                    message.warning("用户未注册，请先注册钱包");
-                }
-            } catch (error) {
-                console.error("wulian wallet request failed:", error);
-            }
-        };
 
         const initNoChain = async () => {
             try {
@@ -110,15 +112,51 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                 }
 
                 noChainProvider.current = new miniProgramApi.BrowserProvider(noChain);
-                const userInfo = await noChainProvider.current.requestAuth({
+                const userInfo = (await noChainProvider.current.requestAuth({
                     type: "auth_account",
                     scope: "userInfo",
                     actions: [],
-                });
+                })) as AuthResponse;
 
                 console.log("result", userInfo);
+                console.log("result", userInfo.data?.accountId);
 
                 if (userInfo.success) {
+                    const accountId = userInfo.data?.accountId?.trim() ?? "";
+
+                    if (isMounted) {
+                        setWalletAccountId(accountId);
+                    }
+
+                    if (accountId) {
+                        try {
+                            const walletInfo = await fetchWalletInfo(accountId);
+                            const nextWalletAddress =
+                                walletInfo.walletAddress?.trim() ?? "";
+
+                            console.log("wulian wallet response:", walletInfo);
+
+                            if (isMounted) {
+                                setWalletAddress(nextWalletAddress);
+                                setHasCheckedWallet(true);
+                            }
+
+                            if (walletInfo.status === "NoRegistered" || !nextWalletAddress) {
+                                message.warning("用户未注册，请先注册钱包");
+                            }
+                        } catch (error) {
+                            console.error("wulian wallet request failed:", error);
+
+                            if (isMounted) {
+                                setWalletAddress("");
+                                setHasCheckedWallet(true);
+                            }
+                        }
+                    } else if (isMounted) {
+                        setWalletAddress("");
+                        setHasCheckedWallet(true);
+                    }
+
                     const account =
                         (await noChainProvider.current.getAccount()) as AccountResponse;
 
@@ -131,8 +169,6 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     if (isMounted) {
                         setDw20AvailableBalance(dw20Balance?.available_balance ?? "0");
                     }
-
-                    void fetchWallet();
                 }
             } catch (error) {
                 console.error("noChain init failed:", error);
@@ -154,12 +190,24 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             return;
         }
 
+        if (!hasCheckedWallet) {
+            return;
+        }
+
+        if (!walletAddress) {
+            queueMicrotask(() => {
+                setExchangePreviewRecords([]);
+                setIsExchangePreviewLoading(false);
+            });
+            return;
+        }
+
         let isMounted = true;
 
         const loadExchangePreviewRecords = async () => {
             try {
                 setIsExchangePreviewLoading(true);
-                const response = await fetchExchangePreviewRecords();
+                const response = await fetchExchangePreviewRecords(walletAddress);
 
                 console.log("exchange preview records:", response);
 
@@ -183,7 +231,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         return () => {
             isMounted = false;
         };
-    }, [activeMode]);
+    }, [activeMode, hasCheckedWallet, walletAddress]);
 
     const maxInputAmount = useMemo(() => {
         if (activeMode === "exchange") {
@@ -261,6 +309,10 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
     const canExchange = Number(receiveAmount) >= 1;
     const switchMode = (nextMode: Mode) => {
+        if (isSubmittingExchange) {
+            return;
+        }
+
         setActiveMode(nextMode);
         setAmount("");
         setIsConfirmOpen(false);
@@ -269,22 +321,32 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     const sendContractMethod = async () => {
         if (!noChainProvider.current) {
             message.warning("钱包插件未初始化");
-            return;
+            return false;
+        }
+
+        if (!walletAddress) {
+            message.warning("用户未注册，请先注册钱包");
+            return false;
+        }
+
+        if (!walletAccountId) {
+            message.warning("钱包账号未初始化");
+            return false;
         }
 
         const opt = {
             receiverId: "dw20-lock.contract",
-            sender_account_id: "1002159596.user",
-            actions:  [{
+            sender_account_id: walletAccountId,
+            actions:  {
                     method_name: "deposit",
                     args: {
-						evm_address: "0x61e026f9ad0af11c2900ada0d59b9dd32f023e98"
+						evm_address: walletAddress
 					},
                     max_gas: 300000000000000,
                     amount: "100000000000000000000000000",
                     symbol: "TDW20",
                     fee_symbol: "TDW20",
-                }],
+                },
         };
 //         let opt = {
 //   "receiverId": "dw20-staking-pool.contract",
@@ -314,25 +376,73 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
 
-        const contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
-        console.log("sendContractTxRaw", contractMethod);
+        try {
+            const contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
+            console.log("sendContractTxRaw", contractMethod);
 
-        if (contractMethod.success && !contractMethod.error) {
+            if (!contractMethod.success || contractMethod.error) {
+                message.error("交易签名失败，请重试");
+                return false;
+            }
+
             console.log('contractMethod.data.txRaw',contractMethod.data.txRaw)
             const sendTxraw = await noChainProvider.current.sendBroadcastTx({
                 txRaw: contractMethod.data.txRaw,
             });
 
-            if (sendTxraw.success && sendTxraw.data.success) {
-                console.log('sendTxraw.data.hash',sendTxraw.data.hash)
-                const getHash = await noChainProvider.current.sendBroadcastHash({
-                    hash: sendTxraw.data.hash,
-                });
-                console.log("getHash", getHash);
-                if (getHash.success && getHash.data.success) {
-                    console.log("合约流程走完毕!");
+            console.log("sendBroadcastTx", sendTxraw);
+
+            if (!sendTxraw.success || !sendTxraw.data.success) {
+                message.error("交易广播失败，请重试");
+                return false;
+            }
+
+            console.log('sendTxraw.data.hash',sendTxraw.data.hash)
+            const getHash = await noChainProvider.current.sendBroadcastHash({
+                hash: sendTxraw.data.hash,
+            });
+            console.log("getHash", getHash);
+
+            if (getHash.success && getHash.data.success) {
+                console.log("合约流程走完毕!");
+                return true;
+            }
+
+            message.error("交易确认失败，请稍后查看记录");
+            return false;
+        } catch (error) {
+            console.error("exchange submit failed:", error);
+            message.error("兑换提交失败，请重试");
+            return false;
+        }
+    };
+
+    const submitExchange = async () => {
+        if (isSubmittingExchange) {
+            return;
+        }
+
+        setIsSubmittingExchange(true);
+        setIsConfirmOpen(false);
+
+        try {
+            const isSuccess = await sendContractMethod();
+
+            if (isSuccess) {
+                message.success("兑换提交成功");
+                setAmount("");
+
+                if (activeMode === "exchange" && walletAddress) {
+                    try {
+                        const response = await fetchExchangePreviewRecords(walletAddress);
+                        setExchangePreviewRecords(response.items ?? []);
+                    } catch (error) {
+                        console.error("refresh exchange preview records failed:", error);
+                    }
                 }
             }
+        } finally {
+            setIsSubmittingExchange(false);
         }
     };
 
@@ -490,21 +600,21 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                             "mt-0.5 mb-7 grid min-h-[52px] w-full place-items-center rounded-[18px]",
                             "border-0 text-[17px] font-[850] transition-[background,box-shadow,transform]",
                             "duration-200 active:translate-y-px",
-                            canExchange
+                            canExchange && !isSubmittingExchange
                                 ? "cursor-pointer bg-linear-to-br from-[#35c4a0] to-[#2f8df5] text-white shadow-[0_14px_26px_rgba(47,141,245,0.24)]"
                                 : "cursor-not-allowed bg-[#e2e6ee] text-[#a5adbd] shadow-none",
                         ].join(" ")}
                         role="button"
-                        tabIndex={canExchange ? 0 : -1}
-                        aria-disabled={!canExchange}
+                        tabIndex={canExchange && !isSubmittingExchange ? 0 : -1}
+                        aria-disabled={!canExchange || isSubmittingExchange}
                         onClick={() => {
-                            if (canExchange) {
+                            if (canExchange && !isSubmittingExchange) {
                                 setIsConfirmOpen(true);
                             }
                         }}
                         onKeyDown={runOnKeyboardClick(
                             () => setIsConfirmOpen(true),
-                            !canExchange,
+                            !canExchange || isSubmittingExchange,
                         )}
                     >
                         {mode.actionText}
@@ -542,13 +652,19 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     paymentAmount={paymentAmount}
                     totalPayment={totalPayment}
                     token={mode.inputToken}
-                    onCancel={() => setIsConfirmOpen(false)}
+                    isSubmitting={isSubmittingExchange}
+                    onCancel={() => {
+                        if (!isSubmittingExchange) {
+                            setIsConfirmOpen(false);
+                        }
+                    }}
                     onConfirm={() => {
-                        void sendContractMethod();
-                        setIsConfirmOpen(false);
+                        void submitExchange();
                     }}
                 />
             )}
+
+            {isSubmittingExchange && <SubmittingOverlay />}
         </main>
     );
 }
@@ -640,9 +756,32 @@ function HomeEmptyRecords() {
     );
 }
 
+function SubmittingOverlay() {
+    return (
+        <div
+            className="fixed inset-0 z-[60] grid place-items-center bg-white/10 px-8 backdrop-blur-[1px]"
+            role="alert"
+            aria-live="assertive"
+        >
+            <div className="grid h-[190px] w-[190px] place-items-center rounded-[28px] bg-[#3f3f3f]/92 text-white shadow-[0_22px_70px_rgba(15,23,42,0.28)]">
+                <div className="flex flex-col items-center">
+                    <span
+                        className="mb-7 h-[58px] w-[58px] animate-spin rounded-full border-[5px] border-white/20 border-t-white"
+                        aria-hidden="true"
+                    ></span>
+                    <p className="m-0 text-[30px] leading-none font-medium tracking-normal">
+                        提交质押中..
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 type ConfirmDialogProps = {
     amountLabel: string;
     feeAmount: number;
+    isSubmitting: boolean;
     modeLabel: string;
     paymentAmount: string;
     token: string;
@@ -654,6 +793,7 @@ type ConfirmDialogProps = {
 function ConfirmDialog({
     amountLabel,
     feeAmount,
+    isSubmitting,
     modeLabel,
     paymentAmount,
     token,
@@ -665,7 +805,11 @@ function ConfirmDialog({
         <div
             className="fixed inset-0 z-50 flex items-end justify-center bg-[#111827]/45 px-3 backdrop-blur-[2px] sm:items-center"
             role="presentation"
-            onClick={onCancel}
+            onClick={() => {
+                if (!isSubmitting) {
+                    onCancel();
+                }
+            }}
         >
             <section
                 className="w-full max-w-[390px] rounded-t-[30px] bg-white p-5 shadow-[0_-24px_70px_rgba(15,23,42,0.24)] [animation:confirm-sheet-in_220ms_ease-out] sm:rounded-[30px]"
@@ -676,12 +820,21 @@ function ConfirmDialog({
             >
                 <header className="relative pb-5 text-center">
                     <div
-                        className="absolute top-0 right-0 grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-[#f4f6fb] text-2xl leading-none text-[#687386]"
+                        className={[
+                            "absolute top-0 right-0 grid h-9 w-9 place-items-center rounded-full",
+                            "bg-[#f4f6fb] text-2xl leading-none text-[#687386]",
+                            isSubmitting ? "cursor-not-allowed opacity-45" : "cursor-pointer",
+                        ].join(" ")}
                         role="button"
-                        tabIndex={0}
+                        tabIndex={isSubmitting ? -1 : 0}
                         aria-label="关闭弹框"
-                        onClick={onCancel}
-                        onKeyDown={runOnKeyboardClick(onCancel)}
+                        aria-disabled={isSubmitting}
+                        onClick={() => {
+                            if (!isSubmitting) {
+                                onCancel();
+                            }
+                        }}
+                        onKeyDown={runOnKeyboardClick(onCancel, isSubmitting)}
                     >
                         ×
                     </div>
@@ -689,14 +842,24 @@ function ConfirmDialog({
                         className="m-0 text-[22px] leading-none font-black text-[#172033]"
                         id="confirm-title"
                     >
-                        {modeLabel}
+                        {isSubmitting ? "兑换中..." : modeLabel}
                     </h2>
                     <p className="mt-2 mb-0 text-sm font-semibold text-[#8a92a6]">
-                        请确认本次交易明细
+                        {isSubmitting ? "正在提交交易，请勿关闭页面" : "请确认本次交易明细"}
                     </p>
                 </header>
 
                 <div>
+                    {isSubmitting && (
+                        <div className="mb-4 flex items-center gap-3 rounded-[18px] bg-[#eef4ff] px-4 py-3 text-sm font-bold text-[#1f55ff]">
+                            <span
+                                className="h-5 w-5 animate-spin rounded-full border-2 border-[#1f55ff]/20 border-t-[#1f55ff]"
+                                aria-hidden="true"
+                            ></span>
+                            正在兑换中，请等待钱包确认结果
+                        </div>
+                    )}
+
                     <div className="mb-4 rounded-[24px] bg-[#f7f9fd] px-4 py-5 text-center">
                         <p className="mb-2 text-sm font-bold text-[#7b8498]">共计支付</p>
                         <strong className="block text-[30px] leading-none font-black text-[#172033]">
@@ -721,22 +884,44 @@ function ConfirmDialog({
 
                     <div className="mt-5 grid grid-cols-2 gap-3">
                         <div
-                            className="grid min-h-[50px] cursor-pointer place-items-center rounded-[16px] bg-[#f1f4f9] text-[16px] font-extrabold text-[#394255] transition-transform duration-200 active:translate-y-px"
+                            className={[
+                                "grid min-h-[50px] place-items-center rounded-[16px]",
+                                "bg-[#f1f4f9] text-[16px] font-extrabold text-[#394255]",
+                                "transition-transform duration-200 active:translate-y-px",
+                                isSubmitting ? "cursor-not-allowed opacity-55" : "cursor-pointer",
+                            ].join(" ")}
                             role="button"
-                            tabIndex={0}
-                            onClick={onCancel}
-                            onKeyDown={runOnKeyboardClick(onCancel)}
+                            tabIndex={isSubmitting ? -1 : 0}
+                            aria-disabled={isSubmitting}
+                            onClick={() => {
+                                if (!isSubmitting) {
+                                    onCancel();
+                                }
+                            }}
+                            onKeyDown={runOnKeyboardClick(onCancel, isSubmitting)}
                         >
                             取消
                         </div>
                         <div
-                            className="grid min-h-[50px] cursor-pointer place-items-center rounded-[16px] bg-[#172033] text-[16px] font-extrabold text-white shadow-[0_12px_24px_rgba(23,32,51,0.22)] transition-transform duration-200 active:translate-y-px"
+                            className={[
+                                "grid min-h-[50px] place-items-center rounded-[16px]",
+                                "text-[16px] font-extrabold text-white shadow-[0_12px_24px_rgba(23,32,51,0.22)]",
+                                "transition-transform duration-200 active:translate-y-px",
+                                isSubmitting
+                                    ? "cursor-not-allowed bg-[#7f8899]"
+                                    : "cursor-pointer bg-[#172033]",
+                            ].join(" ")}
                             role="button"
-                            tabIndex={0}
-                            onClick={onConfirm}
-                            onKeyDown={runOnKeyboardClick(onConfirm)}
+                            tabIndex={isSubmitting ? -1 : 0}
+                            aria-disabled={isSubmitting}
+                            onClick={() => {
+                                if (!isSubmitting) {
+                                    onConfirm();
+                                }
+                            }}
+                            onKeyDown={runOnKeyboardClick(onConfirm, isSubmitting)}
                         >
-                            确定
+                            {isSubmitting ? "提交中..." : "确定"}
                         </div>
                     </div>
                 </div>

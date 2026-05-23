@@ -3,6 +3,11 @@ import { message } from 'antd'
 import { type UIEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { recordTabs, type RecordFilter } from '../data/exchange'
 import { runOnKeyboardClick } from '../lib/keyboard'
+import {
+  fetchWalletInfo,
+  getStoredWalletAccountId,
+  getStoredWalletAddress,
+} from '../lib/wallet'
 
 type RecordsPageProps = {
   onBackHome: () => void
@@ -61,21 +66,20 @@ type ListResponse<T> = {
   }
 }
 
-const evmAddress = '0x61e026f9ad0af11c2900ada0d59b9dd32f023e98'
 const pageSize = 20
 const inFlightRequests = new Map<
   string,
   Promise<ListResponse<BridgeRecord | DepositRecord | WithdrawalRecord>>
 >()
 
-const getTransactionsUrl = (page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/transactions?evm_address=${evmAddress}&page=${page}&page_size=${pageSize}`
+const getTransactionsUrl = (walletAddress: string, page: number) =>
+  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/transactions?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
 
-const getDepositsUrl = (page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${evmAddress}&page=${page}&page_size=${pageSize}`
+const getDepositsUrl = (walletAddress: string, page: number) =>
+  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
 
-const getWithdrawalsUrl = (page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/withdrawals?evm_address=${evmAddress}&page=${page}&page_size=${pageSize}`
+const getWithdrawalsUrl = (walletAddress: string, page: number) =>
+  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/withdrawals?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
 
 async function fetchRecordPage<T extends BridgeRecord | DepositRecord | WithdrawalRecord>(
   url: string,
@@ -108,12 +112,14 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
+  const [walletAddress, setWalletAddress] = useState(() => getStoredWalletAddress())
+  const [hasCheckedWallet, setHasCheckedWallet] = useState(false)
   const requestKeyRef = useRef('')
   const activeTabIndex = recordTabs.findIndex((tab) => tab.value === recordFilter)
 
   const loadRecords = useCallback(
     async (nextPage: number, mode: 'reset' | 'append') => {
-      const requestKey = `${recordFilter}-${nextPage}-${mode}`
+      const requestKey = `${walletAddress}-${recordFilter}-${nextPage}-${mode}`
       requestKeyRef.current = requestKey
 
       try {
@@ -126,8 +132,17 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
           setIsLoadingMore(true)
         }
 
+        if (!walletAddress) {
+          setRecords([])
+          setPage(1)
+          setHasMore(false)
+          return
+        }
+
         if (recordFilter === 'exchange') {
-          const response = await fetchRecordPage<DepositRecord>(getDepositsUrl(nextPage))
+          const response = await fetchRecordPage<DepositRecord>(
+            getDepositsUrl(walletAddress, nextPage),
+          )
           const exchangeRecords = (response.items ?? []).map(normalizeExchangeDeposit)
 
           console.log('deposits response:', response)
@@ -146,7 +161,7 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
           )
         } else if (recordFilter === 'wallet') {
           const response = await fetchRecordPage<WithdrawalRecord>(
-            getWithdrawalsUrl(nextPage),
+            getWithdrawalsUrl(walletAddress, nextPage),
           )
           const walletRecords = (response.items ?? []).map(normalizeWithdrawal)
 
@@ -166,7 +181,7 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
           )
         } else {
           const response = await fetchRecordPage<BridgeRecord>(
-            getTransactionsUrl(nextPage),
+            getTransactionsUrl(walletAddress, nextPage),
           )
           const transactionRecords = response.items ?? []
 
@@ -195,14 +210,65 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
         }
       }
     },
-    [recordFilter],
+    [recordFilter, walletAddress],
   )
 
   useEffect(() => {
+    let isMounted = true
+
+    const loadWalletAddress = async () => {
+      const accountId = getStoredWalletAccountId()
+
+      if (!accountId) {
+        if (isMounted) {
+          setWalletAddress('')
+          setHasCheckedWallet(true)
+        }
+        return
+      }
+
+      try {
+        const walletInfo = await fetchWalletInfo(accountId)
+        const nextWalletAddress = walletInfo.walletAddress?.trim() ?? ''
+
+        console.log('wulian wallet response:', walletInfo)
+
+        if (!isMounted) {
+          return
+        }
+
+        setWalletAddress(nextWalletAddress)
+        setHasCheckedWallet(true)
+
+        if (walletInfo.status === 'NoRegistered' || !nextWalletAddress) {
+          message.warning('用户未注册，请先注册钱包')
+        }
+      } catch (error) {
+        console.error('wulian wallet request failed:', error)
+
+        if (isMounted) {
+          setWalletAddress('')
+          setHasCheckedWallet(true)
+        }
+      }
+    }
+
+    void loadWalletAddress()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hasCheckedWallet) {
+      return
+    }
+
     queueMicrotask(() => {
       void loadRecords(1, 'reset')
     })
-  }, [loadRecords])
+  }, [hasCheckedWallet, loadRecords])
 
   const loadMore = () => {
     if (isLoading || isLoadingMore || !hasMore) {
