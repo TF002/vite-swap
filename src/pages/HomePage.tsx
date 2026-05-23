@@ -38,8 +38,12 @@ type ExchangePreviewRecord = {
     wulian_account: string;
     evm_address: string;
     amount: string;
+    from_amount?: string;
+    to_amount?: string;
     deposit_time: number;
     deposit_seq: number;
+    status?: string;
+    failed_reason?: string | null;
 };
 
 type ExchangePreviewResponse = {
@@ -577,33 +581,38 @@ function ExchangePreviewList({
             id="records"
         >
             {records.map((record) => (
-                <div
-                    className="rounded-[14px] bg-white px-3.5 py-3 shadow-[0_8px_22px_rgba(36,48,76,0.06)]"
+                <article
+                    className="overflow-hidden rounded-[16px] bg-white shadow-[0_8px_22px_rgba(36,48,76,0.06)]"
                     key={`${record.chainless_tx_hash}-${record.deposit_seq}`}
                 >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                        <strong className="text-sm font-black text-[#172033]">
-                            DW20 → FTC
-                        </strong>
-                        <span className="rounded-full bg-[#eaf8f4] px-2 py-0.5 text-[11px] font-black text-[#23a57f]">
-                            成功
+                    <header className="flex items-center justify-between gap-3 border-b border-[#f0f2f7] px-3.5 py-3">
+                        <div className="flex items-center gap-2">
+                            <span className="h-5 w-1.25 rounded-full bg-[#23b594]"></span>
+                            <strong className="text-sm font-black text-[#172033]">
+                                猜奖币兑换
+                            </strong>
+                        </div>
+                        <span className={getStatusClassName(record.status)}>
+                            {formatStatus(record.status)}
                         </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                    </header>
+                    <dl className="grid grid-cols-2 gap-2 px-3.5 py-3 text-xs font-bold">
+                        <dt className="text-[#8a92a6]">兑换方向</dt>
+                        <dd className="m-0 text-right text-[#222b3d]">DW20 → FTC</dd>
                         <span className="text-[#8a92a6]">兑换数量</span>
-                        <span className="text-right text-[#222b3d]">
-                            {formatTokenAmount(record.amount)} DW20
-                        </span>
-                        <span className="text-[#8a92a6]">获得数量</span>
-                        <span className="text-right text-[#222b3d]">
-                            {formatTokenAmount(record.amount)} FTC
-                        </span>
-                        <span className="text-[#8a92a6]">时间</span>
-                        <span className="text-right text-[#222b3d]">
+                        <dd className="m-0 text-right text-[#222b3d]">
+                            {formatTokenAmount(record.from_amount ?? record.amount)} DW20
+                        </dd>
+                        <dt className="text-[#8a92a6]">获得数量</dt>
+                        <dd className="m-0 text-right text-[#222b3d]">
+                            {formatTokenAmount(record.to_amount ?? record.amount)} FTC
+                        </dd>
+                        <dt className="text-[#8a92a6]">时间</dt>
+                        <dd className="m-0 text-right text-[#222b3d]">
                             {formatTimestamp(record.deposit_time)}
-                        </span>
-                    </div>
-                </div>
+                        </dd>
+                    </dl>
+                </article>
             ))}
         </div>
     );
@@ -772,6 +781,39 @@ function formatTokenAmount(amount: string) {
     } catch {
         return amount;
     }
+}
+
+function getStatusClassName(status = "success") {
+    const base = "rounded-full px-2 py-0.5 text-[11px] font-black";
+
+    if (status === "success") {
+        return `${base} bg-[#eaf8f4] text-[#23a57f]`;
+    }
+
+    if (status === "error") {
+        return `${base} bg-[#fff1f0] text-[#d93026]`;
+    }
+
+    if (status === "pending") {
+        return `${base} bg-[#fff7e6] text-[#d46b08]`;
+    }
+
+    if (status === "in_progress") {
+        return `${base} bg-[#eef4ff] text-[#1f55ff]`;
+    }
+
+    return `${base} bg-[#f1f4f9] text-[#6f7788]`;
+}
+
+function formatStatus(status = "success") {
+    const statusMap: Record<string, string> = {
+        error: "失败",
+        in_progress: "处理中",
+        pending: "待处理",
+        success: "成功",
+    };
+
+    return statusMap[status] ?? status;
 }
 
 function formatTimestamp(timestamp: number) {
