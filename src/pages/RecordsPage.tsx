@@ -33,6 +33,8 @@ type DepositRecord = {
   amount: string
   deposit_time: number
   deposit_seq: number
+  status?: string
+  failed_reason?: string | null
 }
 
 type WithdrawalRecord = {
@@ -340,7 +342,7 @@ function BridgeRecordCard({ record }: { record: BridgeRecord }) {
         </span>
       </header>
 
-      <dl className="grid gap-5 px-5 py-5">
+      <dl className="grid gap-3 px-5 py-5">
         <RecordRow label="兑换方向" value={isExchange ? 'DW20 → FTC' : 'FTC → DW20'} />
         <RecordRow label="兑换数量" value={`${amount} ${inputToken}`} />
         <RecordRow label="获得数量" value={`${amount} ${outputToken}`} />
@@ -416,8 +418,8 @@ function normalizeExchangeDeposit(record: DepositRecord): BridgeRecord {
     updated_at: record.deposit_time,
     deposit_seq: record.deposit_seq,
     notify_status: null,
-    status: 'success',
-    failed_reason: null,
+    status: record.status ?? 'success',
+    failed_reason: record.failed_reason ?? null,
   }
 }
 
