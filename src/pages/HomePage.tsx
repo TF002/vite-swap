@@ -525,7 +525,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     evm_address: walletAddress,
                 },
                 max_gas: 300000000000000,
-                amount: "100000000000000000000000000",
+                amount: parseNearAmount(paymentAmount),
                 symbol: "TDW20",
                 fee_symbol: "TDW20",
             },
@@ -887,11 +887,11 @@ function ExchangePreviewList({
                         <dd className="m-0 text-right text-[#222b3d]">DW20 → FTC</dd>
                         <span className="text-[#8a92a6]">兑换数量</span>
                         <dd className="m-0 text-right text-[#222b3d]">
-                            {formatTokenAmount(record.from_amount ?? record.amount)} DW20
+                            {record.from_amount}
                         </dd>
                         <dt className="text-[#8a92a6]">获得数量</dt>
                         <dd className="m-0 text-right text-[#222b3d]">
-                            {formatTokenAmount(record.to_amount ?? record.amount)} FTC
+                            {record.to_amount}
                         </dd>
                         <dt className="text-[#8a92a6]">时间</dt>
                         <dd className="m-0 text-right text-[#222b3d]">
@@ -1117,25 +1117,6 @@ function ConfirmRow({
             </strong>
         </div>
     );
-}
-
-function formatTokenAmount(amount: string) {
-    try {
-        const value = BigInt(amount);
-        const base = 10n ** 18n;
-        const integer = value / base;
-        const fraction = value % base;
-
-        if (fraction === 0n) {
-            return integer.toLocaleString();
-        }
-
-        const fractionText = fraction.toString().padStart(18, "0").replace(/0+$/, "");
-
-        return `${integer.toLocaleString()}.${fractionText}`;
-    } catch {
-        return amount;
-    }
 }
 
 function getStatusClassName(status = "success") {
