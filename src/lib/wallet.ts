@@ -22,6 +22,7 @@ export const getStoredWalletAddress = () =>
 export async function fetchWalletInfo(accountId: string) {
   const normalizedAccountId = accountId.trim()
 
+  // 没有授权账号时清空本地缓存，后续页面不再请求依赖钱包地址的接口。
   if (!normalizedAccountId) {
     window.localStorage.removeItem(walletAccountIdStorageKey)
     window.localStorage.removeItem(walletAddressStorageKey)
@@ -38,6 +39,7 @@ export async function fetchWalletInfo(accountId: string) {
     return existingRequest
   }
 
+  // 同一个账号的请求复用进行中的 Promise，避免首页和记录页重复请求钱包地址。
   const request = axios
     .get<WalletResponse>(getWalletUrl(normalizedAccountId))
     .then((response) => {

@@ -122,6 +122,7 @@ function formatNearAmount(amountText: string) {
     return `${integer}.${fractionText}`;
 }
 
+// 兑换前调用链 RPC 预估手续费，弹框里的“手续费”和“共计支付”都来自这里。
 async function estimateTransferFee({
     accountId,
     amount,
@@ -168,6 +169,7 @@ async function estimateTransferFee({
     }
 }
 
+// 广播后后端需要异步落库，这里按 0.7 秒一次轮询，最多查询 40 次。
 async function pollDepositStatus(chainlessTxHash: string) {
     const depositStatusUrl = getWalletApiUrl(
         `/pub/bridge/deposit?chainless_tx_hash=${encodeURIComponent(chainlessTxHash)}`,
@@ -199,6 +201,7 @@ async function pollDepositStatus(chainlessTxHash: string) {
     return false;
 }
 
+// 首页只展示最近 5 条猜奖币兑换记录，完整列表在 RecordsPage 中按分页加载。
 async function fetchExchangePreviewRecords(walletAddress: string) {
     const exchangePreviewUrl = getBridgeApiUrl(
         `/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=1&page_size=5`,
@@ -256,6 +259,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                 }
 
                 noChainProvider.current = new miniProgramApi.BrowserProvider(noChain);
+                // 先拿无链授权账号，再用 accountId 查询钱包地址；没有钱包地址时不请求记录接口。
                 const userInfo = (await noChainProvider.current.requestAuth({
                     type: "auth_account",
                     scope: "userInfo",
@@ -301,6 +305,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                         setHasCheckedWallet(true);
                     }
 
+                    // getAccount 返回的是无链账户资产，这里只取 DW20 可用余额限制输入上限。
                     const account =
                         (await noChainProvider.current.getAccount()) as AccountResponse;
 
@@ -476,6 +481,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         setIsEstimatingFee(true);
 
         try {
+            // 打开二次确认弹框前先预估手续费，避免弹框展示固定假数据。
             const fee = await estimateTransferFee({
                 accountId: walletAccountId,
                 amount: paymentAmount,
@@ -524,6 +530,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
         try {
+            // SDK 类型声明写的是 actions 数组，但当前运行时要求对象；这里保留对象并只适配 TS 类型。
             const contractMethod = await (
                 noChainProvider.current.sendContractTxRaw as unknown as SendContractTxRaw
             ).call(noChainProvider.current, opt);
@@ -557,6 +564,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                 return false;
             }
 
+            // 钱包确认成功不代表后端充值状态已完成，还需要用交易 hash 轮询后端状态。
             const isDepositSuccess = await pollDepositStatus(sendTxraw.data.hash);
 
             if (isDepositSuccess) {

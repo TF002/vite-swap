@@ -97,6 +97,7 @@ async function fetchRecordPage<T extends BridgeRecord | DepositRecord | Withdraw
     return existingRequest as Promise<ListResponse<T>>
   }
 
+  // 相同 URL 的分页请求复用进行中的 Promise，避免 tab 切换或滚动触发重复请求。
   const request = axios
     .get<ListResponse<T>>(url)
     .then((response) => response.data)
@@ -146,6 +147,7 @@ function RecordsPage({ onBackHome }: RecordsPageProps) {
           return
         }
 
+        // 三个 tab 使用不同接口，最终都归一成 BridgeRecord，便于共用卡片 UI。
         if (recordFilter === 'exchange') {
           const response = await fetchRecordPage<DepositRecord>(
             getDepositsUrl(walletAddress, nextPage),
@@ -478,6 +480,7 @@ function StatusRow({ status }: { status: string }) {
   )
 }
 
+// deposits 接口字段较少，这里补齐公共记录字段供列表统一渲染。
 function normalizeExchangeDeposit(record: DepositRecord): BridgeRecord {
   return {
     type: 'deposit',
@@ -496,6 +499,7 @@ function normalizeExchangeDeposit(record: DepositRecord): BridgeRecord {
   }
 }
 
+// withdrawals 的时间字段可能来自不同阶段，按接口约定依次兜底。
 function normalizeWithdrawal(record: WithdrawalRecord): BridgeRecord {
   const happenedAt =
     record.happened_at ??
