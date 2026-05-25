@@ -883,8 +883,6 @@ function ExchangePreviewList({
 
 function HomeRecordCard({ record }: { record: ExchangePreviewRecord }) {
     const amount = formatTokenAmount(record.amount);
-    const inputAmount = formatTokenAmount(record.from_amount ?? record.amount);
-    const outputAmount = formatTokenAmount(record.to_amount ?? record.amount);
 
     return (
         <article className="overflow-hidden rounded-[16px] bg-white shadow-[0_8px_22px_rgba(36,48,76,0.06)]">
@@ -904,11 +902,11 @@ function HomeRecordCard({ record }: { record: ExchangePreviewRecord }) {
                 <dd className="m-0 text-right text-[#222b3d]">DW20 → FTC</dd>
                 <span className="text-[#8a92a6]">兑换数量</span>
                 <dd className="m-0 text-right text-[#222b3d]">
-                    {`${inputAmount || amount} DW20`}
+                    {`${amount} DW20`}
                 </dd>
                 <dt className="text-[#8a92a6]">获得数量</dt>
                 <dd className="m-0 text-right text-[#222b3d]">
-                    {`${outputAmount || amount} FTC`}
+                    {`${amount} FTC`}
                 </dd>
                 <dt className="text-[#8a92a6]">时间</dt>
                 <dd className="m-0 text-right text-[#222b3d]">
