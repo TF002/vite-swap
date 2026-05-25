@@ -41,6 +41,24 @@ type AuthResponse = {
 
 type NoChainProvider = InstanceType<typeof miniProgramApi.BrowserProvider>;
 
+type ContractTxRawParams = {
+    receiverId: string;
+    sender_account_id: string;
+    actions: {
+        method_name: string;
+        args: {
+            evm_address: string;
+        };
+        max_gas: number;
+        amount: string;
+        symbol: string;
+        fee_symbol: string;
+    };
+};
+
+type SendContractTxRaw = (
+    params: ContractTxRawParams,
+) => ReturnType<NoChainProvider["sendContractTxRaw"]>;
 
 type ExchangePreviewRecord = {
     chainless_tx_hash: string;
@@ -490,23 +508,25 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         const opt = {
             receiverId,
             sender_account_id: walletAccountId,
-            actions:  {
-                    method_name: "deposit",
-                    args: {
-						evm_address: walletAddress
-					},
-                    max_gas: 300000000000000,
-                    amount: "100000000000000000000000000",
-                    symbol: "TDW20",
-                    fee_symbol: "TDW20",
+            actions: {
+                method_name: "deposit",
+                args: {
+                    evm_address: walletAddress,
                 },
-        };
+                max_gas: 300000000000000,
+                amount: "100000000000000000000000000",
+                symbol: "TDW20",
+                fee_symbol: "TDW20",
+            },
+        } satisfies ContractTxRawParams;
 
-            console.log("opt", opt);
+        console.log("opt", opt);
 
 
         try {
-            const contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
+            const sendContractTxRaw =
+                noChainProvider.current.sendContractTxRaw as unknown as SendContractTxRaw;
+            const contractMethod = await sendContractTxRaw(opt);
             console.log("sendContractTxRaw", contractMethod);
 
             if (!contractMethod.success || contractMethod.error) {
