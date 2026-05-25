@@ -18,6 +18,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/wallet-api/, ''),
       },
+      '/bridge-api': {
+        target: 'https://dw20-lock-relayer.chainlessdw20.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/bridge-api/, ''),
+      },
     },
   },
 })
