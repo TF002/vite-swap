@@ -487,7 +487,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         }
     };
 
-    const sendContractMethod = async () => {
+ const sendContractMethod = async () => {
         if (!noChainProvider.current) {
             message.warning("钱包插件未初始化");
             return false;
@@ -506,16 +506,16 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         const opt = {
             receiverId,
             sender_account_id: walletAccountId,
-            actions: {
-                method_name: "deposit",
-                args: {
-                    evm_address: walletAddress,
+            actions:  {
+                    method_name: "deposit",
+                    args: {
+						evm_address: walletAddress
+					},
+                    max_gas: 300000000000000,
+                    amount: "100000000000000000000000000",
+                    symbol: "TDW20",
+                    fee_symbol: "TDW20",
                 },
-                max_gas: 300000000000000,
-                amount: "100000000000000000000000000",
-                symbol: "TDW20",
-                fee_symbol: "TDW20",
-            },
         };
 //         let opt = {
 //   "receiverId": "dw20-staking-pool.contract",
@@ -546,8 +546,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
         try {
-            const contractMethod = noChainProvider.current.sendContractTxRaw(opt);
-            // const contractMethod = await sendContractTxRaw(opt);
+            const contractMethod = await noChainProvider.current.sendContractTxRaw(opt);
             console.log("sendContractTxRaw", contractMethod);
 
             if (!contractMethod.success || contractMethod.error) {
@@ -943,10 +942,10 @@ function SubmittingOverlay() {
             <div className="grid h-[160px] w-[160px] place-items-center rounded-[28px] bg-[#3f3f3f]/92 text-white shadow-[0_22px_70px_rgba(15,23,42,0.28)]">
                 <div className="flex flex-col items-center">
                     <span
-                        className="mb-7 h-[40px] w-[40px] animate-spin rounded-full border-[5px] border-white/20 border-t-white"
+                        className="mb-7 h-[38px] w-[38px] animate-spin rounded-full border-[4px] border-white/20 border-t-white"
                         aria-hidden="true"
                     ></span>
-                    <p className="m-0 text-[22px] leading-none font-medium tracking-normal">
+                    <p className="m-0 text-[16px] leading-none font-medium tracking-normal">
                         提交质押中..
                     </p>
                 </div>
