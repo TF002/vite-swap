@@ -2,6 +2,7 @@ import axios from "axios";
 import { message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableAmount, modes, type Mode } from "../data/exchange";
+import { getBridgeApiUrl, getWalletApiUrl, rpcUrl } from "../lib/api";
 import { runOnKeyboardClick } from "../lib/keyboard";
 import {
     fetchWalletInfo,
@@ -72,9 +73,6 @@ type RpcResponse = {
 };
 
 const exchangePreviewRequests = new Map<string, Promise<ExchangePreviewResponse>>();
-const rpcUrl = import.meta.env.DEV
-    ? "/rpc"
-    : "https://rpc-testnet.chainlessdw20.com/";
 
 const wait = (delay: number) =>
     new Promise((resolve) => {
@@ -132,7 +130,6 @@ async function estimateTransferFee({
                 },
             },
             {
-                headers: { rpc: "true" },
                 timeout: 50000,
             },
         );
@@ -153,7 +150,9 @@ async function estimateTransferFee({
 }
 
 async function pollDepositStatus(chainlessTxHash: string) {
-    const depositStatusUrl = `http://mmt-user.budingcc.cc/pub/bridge/deposit?chainless_tx_hash=${encodeURIComponent(chainlessTxHash)}`;
+    const depositStatusUrl = getWalletApiUrl(
+        `/pub/bridge/deposit?chainless_tx_hash=${encodeURIComponent(chainlessTxHash)}`,
+    );
 
     for (let retryCount = 0; retryCount < 40; retryCount += 1) {
         try {
@@ -182,7 +181,9 @@ async function pollDepositStatus(chainlessTxHash: string) {
 }
 
 async function fetchExchangePreviewRecords(walletAddress: string) {
-    const exchangePreviewUrl = `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=1&page_size=5`;
+    const exchangePreviewUrl = getBridgeApiUrl(
+        `/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=1&page_size=5`,
+    );
     const existingRequest = exchangePreviewRequests.get(exchangePreviewUrl);
 
     if (existingRequest) {
@@ -488,7 +489,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         const opt = {
             receiverId,
             sender_account_id: walletAccountId,
-            actions:  [{
+            actions:  {
                     method_name: "deposit",
                     args: {
 						evm_address: walletAddress
@@ -497,7 +498,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     amount: "100000000000000000000000000",
                     symbol: "TDW20",
                     fee_symbol: "TDW20",
-                }],
+                },
         };
 //         let opt = {
 //   "receiverId": "dw20-staking-pool.contract",

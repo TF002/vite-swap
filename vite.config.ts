@@ -13,6 +13,11 @@ export default defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/rpc/, '/'),
       },
+      '/wallet-api': {
+        target: 'http://mmt-user.budingcc.cc',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/wallet-api/, ''),
+      },
     },
   },
 })

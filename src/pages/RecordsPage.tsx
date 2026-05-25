@@ -2,6 +2,7 @@ import axios from 'axios'
 import { message } from 'antd'
 import { type UIEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { recordTabs, type RecordFilter } from '../data/exchange'
+import { getBridgeApiUrl } from '../lib/api'
 import { runOnKeyboardClick } from '../lib/keyboard'
 import {
   fetchWalletInfo,
@@ -73,13 +74,19 @@ const inFlightRequests = new Map<
 >()
 
 const getTransactionsUrl = (walletAddress: string, page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/transactions?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
+  getBridgeApiUrl(
+    `/pub/bridge/transactions?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`,
+  )
 
 const getDepositsUrl = (walletAddress: string, page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
+  getBridgeApiUrl(
+    `/pub/bridge/deposits?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`,
+  )
 
 const getWithdrawalsUrl = (walletAddress: string, page: number) =>
-  `https://dw20-lock-relayer.chainlessdw20.com/pub/bridge/withdrawals?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`
+  getBridgeApiUrl(
+    `/pub/bridge/withdrawals?evm_address=${encodeURIComponent(walletAddress)}&page=${page}&page_size=${pageSize}`,
+  )
 
 async function fetchRecordPage<T extends BridgeRecord | DepositRecord | WithdrawalRecord>(
   url: string,

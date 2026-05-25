@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getWalletApiUrl } from './api'
 
 export type WalletResponse = {
   walletAddress: string
@@ -10,7 +11,7 @@ const walletAddressStorageKey = 'wulian_wallet_address'
 const walletRequestMap = new Map<string, Promise<WalletResponse>>()
 
 const getWalletUrl = (accountId: string) =>
-  `http://mmt-user.budingcc.cc/pub/wallet/wulian?userId=${encodeURIComponent(accountId)}`
+  getWalletApiUrl(`/pub/wallet/wulian?userId=${encodeURIComponent(accountId)}`)
 
 export const getStoredWalletAccountId = () =>
   window.localStorage.getItem(walletAccountIdStorageKey) ?? ''
