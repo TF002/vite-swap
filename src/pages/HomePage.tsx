@@ -517,32 +517,8 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                     fee_symbol: "TDW20",
                 },
         };
-//         let opt = {
-//   "receiverId": "dw20-staking-pool.contract",
-//   "sender_account_id": "1002159596.user",
-//   "actions": {
-//     "method_name": "deposit",
-//     "args": {},
-//     "max_gas": "300000000000000",
-//     "amount": "100000000000000000000000000",
-//     "symbol": "TDW20",
-//     "fee_symbol": "TDW20"
-//   }
-// }
+
             console.log("opt", opt);
-
-        // let opt = {
-		// 		receiverId: 'dw20-lock.contract',
-		// 		sender_account_id: '10021595962.user',
-		// 		actions: {
-		// 			method_name: 'deposit',
-		// 			args: {
-		// 				evm_address: "0x61e026f9ad0af11c2900ada0d59b9dd32f023e98"
-		// 			},
-		// 			max_gas: 300000000000000,
-		// 		}
-		// 	}
-
 
 
         try {
