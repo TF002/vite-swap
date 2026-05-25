@@ -587,6 +587,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             message.error("交易确认失败，请稍后查看记录");
             return false;
         } catch (error) {
+            console.log('3333333')
             console.error("exchange submit failed:", error);
             message.error("兑换提交失败，请重试");
             return false;
