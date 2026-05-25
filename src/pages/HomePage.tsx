@@ -587,6 +587,19 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         }
     };
 
+    const refreshExchangePreviewRecords = async () => {
+        if (activeMode !== "exchange" || !walletAddress) {
+            return;
+        }
+
+        try {
+            const response = await fetchExchangePreviewRecords(walletAddress);
+            setExchangePreviewRecords(response.items ?? []);
+        } catch (error) {
+            console.error("refresh exchange preview records failed:", error);
+        }
+    };
+
     const submitExchange = async () => {
         if (isSubmittingExchange) {
             return;
@@ -601,17 +614,9 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             if (isSuccess) {
                 message.success("兑换提交成功");
                 setAmount("");
-
-                if (activeMode === "exchange" && walletAddress) {
-                    try {
-                        const response = await fetchExchangePreviewRecords(walletAddress);
-                        setExchangePreviewRecords(response.items ?? []);
-                    } catch (error) {
-                        console.error("refresh exchange preview records failed:", error);
-                    }
-                }
             }
         } finally {
+            await refreshExchangePreviewRecords();
             setIsSubmittingExchange(false);
         }
     };
@@ -867,40 +872,50 @@ function ExchangePreviewList({
             id="records"
         >
             {records.map((record) => (
-                <article
-                    className="overflow-hidden rounded-[16px] bg-white shadow-[0_8px_22px_rgba(36,48,76,0.06)]"
+                <HomeRecordCard
                     key={`${record.chainless_tx_hash}-${record.deposit_seq}`}
-                >
-                    <header className="flex items-center justify-between gap-3 border-b border-[#f0f2f7] px-3.5 py-3">
-                        <div className="flex items-center gap-2">
-                            <span className="h-5 w-1.25 rounded-full bg-[#23b594]"></span>
-                            <strong className="text-sm font-black text-[#172033]">
-                                猜奖币兑换
-                            </strong>
-                        </div>
-                        <span className={getStatusClassName(record.status)}>
-                            {formatStatus(record.status)}
-                        </span>
-                    </header>
-                    <dl className="grid grid-cols-2 gap-2 px-3.5 py-3 text-xs font-bold">
-                        <dt className="text-[#8a92a6]">兑换方向</dt>
-                        <dd className="m-0 text-right text-[#222b3d]">DW20 → FTC</dd>
-                        <span className="text-[#8a92a6]">兑换数量</span>
-                        <dd className="m-0 text-right text-[#222b3d]">
-                            {record.from_amount}
-                        </dd>
-                        <dt className="text-[#8a92a6]">获得数量</dt>
-                        <dd className="m-0 text-right text-[#222b3d]">
-                            {record.to_amount}
-                        </dd>
-                        <dt className="text-[#8a92a6]">时间</dt>
-                        <dd className="m-0 text-right text-[#222b3d]">
-                            {formatTimestamp(record.deposit_time)}
-                        </dd>
-                    </dl>
-                </article>
+                    record={record}
+                />
             ))}
         </div>
+    );
+}
+
+function HomeRecordCard({ record }: { record: ExchangePreviewRecord }) {
+    const amount = formatTokenAmount(record.amount);
+    const inputAmount = formatTokenAmount(record.from_amount ?? record.amount);
+    const outputAmount = formatTokenAmount(record.to_amount ?? record.amount);
+
+    return (
+        <article className="overflow-hidden rounded-[16px] bg-white shadow-[0_8px_22px_rgba(36,48,76,0.06)]">
+            <header className="flex items-center justify-between gap-3 border-b border-[#f0f2f7] px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                    <span className="h-5 w-1.25 rounded-full bg-[#23b594]"></span>
+                    <strong className="text-sm font-black text-[#172033]">
+                        猜奖币兑换
+                    </strong>
+                </div>
+                <span className={getStatusClassName(record.status)}>
+                    {formatStatus(record.status)}
+                </span>
+            </header>
+            <dl className="grid grid-cols-2 gap-2 px-3.5 py-3 text-xs font-bold">
+                <dt className="text-[#8a92a6]">兑换方向</dt>
+                <dd className="m-0 text-right text-[#222b3d]">DW20 → FTC</dd>
+                <span className="text-[#8a92a6]">兑换数量</span>
+                <dd className="m-0 text-right text-[#222b3d]">
+                    {`${inputAmount || amount} DW20`}
+                </dd>
+                <dt className="text-[#8a92a6]">获得数量</dt>
+                <dd className="m-0 text-right text-[#222b3d]">
+                    {`${outputAmount || amount} FTC`}
+                </dd>
+                <dt className="text-[#8a92a6]">时间</dt>
+                <dd className="m-0 text-right text-[#222b3d]">
+                    {formatTimestamp(record.deposit_time)}
+                </dd>
+            </dl>
+        </article>
     );
 }
 
@@ -1117,6 +1132,25 @@ function ConfirmRow({
             </strong>
         </div>
     );
+}
+
+function formatTokenAmount(amount: string) {
+    try {
+        const value = BigInt(amount);
+        const base = 10n ** 18n;
+        const integer = value / base;
+        const fraction = value % base;
+
+        if (fraction === 0n) {
+            return integer.toLocaleString();
+        }
+
+        const fractionText = fraction.toString().padStart(18, "0").replace(/0+$/, "");
+
+        return `${integer.toLocaleString()}.${fractionText}`;
+    } catch {
+        return amount;
+    }
 }
 
 function getStatusClassName(status = "success") {
