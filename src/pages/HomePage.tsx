@@ -546,10 +546,8 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
         try {
-            const sendContractTxRaw = noChainProvider.current.sendContractTxRaw as unknown as (
-                params: ContractTxRawParams,
-            ) => ReturnType<NoChainProvider["sendContractTxRaw"]>;
-            const contractMethod = await sendContractTxRaw(opt);
+            const contractMethod = noChainProvider.current.sendContractTxRaw(opt);
+            // const contractMethod = await sendContractTxRaw(opt);
             console.log("sendContractTxRaw", contractMethod);
 
             if (!contractMethod.success || contractMethod.error) {
