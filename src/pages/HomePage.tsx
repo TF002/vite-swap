@@ -524,9 +524,9 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
 
         try {
-            const sendContractTxRaw =
-                noChainProvider.current.sendContractTxRaw as unknown as SendContractTxRaw;
-            const contractMethod = await sendContractTxRaw(opt);
+            const contractMethod = await (
+                noChainProvider.current.sendContractTxRaw as unknown as SendContractTxRaw
+            ).call(noChainProvider.current, opt);
             console.log("sendContractTxRaw", contractMethod);
 
             if (!contractMethod.success || contractMethod.error) {
