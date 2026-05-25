@@ -92,11 +92,45 @@ type RpcResponse = {
 };
 
 const exchangePreviewRequests = new Map<string, Promise<ExchangePreviewResponse>>();
+const authUserInfoSessionKey = "wulian_auth_user_info";
 
 const wait = (delay: number) =>
     new Promise((resolve) => {
         window.setTimeout(resolve, delay);
     });
+
+function getStoredAuthInfo() {
+    try {
+        const authText = window.sessionStorage.getItem(authUserInfoSessionKey);
+
+        if (!authText) {
+            return null;
+        }
+
+        return JSON.parse(authText) as AuthResponse;
+    } catch {
+        return null;
+    }
+}
+
+function getStoredAuthAccountId() {
+    return getStoredAuthInfo()?.data?.accountId?.trim() ?? "";
+}
+
+function setStoredAuthInfo(authInfo: AuthResponse | null) {
+    try {
+        if (authInfo?.data?.accountId) {
+            window.sessionStorage.setItem(
+                authUserInfoSessionKey,
+                JSON.stringify(authInfo),
+            );
+        } else {
+            window.sessionStorage.removeItem(authUserInfoSessionKey);
+        }
+    } catch {
+        // sessionStorage 在部分 WebView 隐私模式下可能不可用，不影响授权主流程。
+    }
+}
 
 function parseNearAmount(amountText: string) {
     const [integerPart = "0", fractionPart = ""] = amountText.trim().split(".");
@@ -237,7 +271,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     >([]);
     const [isExchangePreviewLoading, setIsExchangePreviewLoading] = useState(false);
     const [walletAccountId, setWalletAccountId] = useState(() =>
-        getStoredWalletAccountId(),
+        getStoredAuthAccountId() || getStoredWalletAccountId(),
     );
     const [walletAddress, setWalletAddress] = useState(() => getStoredWalletAddress());
     const [hasCheckedWallet, setHasCheckedWallet] = useState(false);
@@ -259,65 +293,76 @@ function HomePage({ onOpenRecords }: HomePageProps) {
                 }
 
                 noChainProvider.current = new miniProgramApi.BrowserProvider(noChain);
-                // 先拿无链授权账号，再用 accountId 查询钱包地址；没有钱包地址时不请求记录接口。
-                const userInfo = (await noChainProvider.current.requestAuth({
-                    type: "auth_account",
-                    scope: "userInfo",
-                    actions: [],
-                })) as AuthResponse;
+                const storedAccountId = getStoredAuthAccountId();
+                let accountId = storedAccountId;
 
-                console.log("result", userInfo);
-                console.log("result", userInfo.data?.accountId);
+                if (!accountId) {
+                    // 先拿无链授权账号，再用 accountId 查询钱包地址；同一小程序会话内会缓存账号避免重复授权。
+                    const userInfo = (await noChainProvider.current.requestAuth({
+                        type: "auth_account",
+                        scope: "userInfo",
+                        actions: [],
+                    })) as AuthResponse;
 
-                if (userInfo.success) {
-                    const accountId = userInfo.data?.accountId?.trim() ?? "";
+                    console.log("result", userInfo);
+                    console.log("result", userInfo.data?.accountId);
 
-                    if (isMounted) {
-                        setWalletAccountId(accountId);
+                    if (!userInfo.success) {
+                        setStoredAuthInfo(null);
+                        return;
                     }
 
-                    if (accountId) {
-                        try {
-                            const walletInfo = await fetchWalletInfo(accountId);
-                            const nextWalletAddress =
-                                walletInfo.walletAddress?.trim() ?? "";
+                    accountId = userInfo.data?.accountId?.trim() ?? "";
+                    setStoredAuthInfo(userInfo);
+                } else {
+                    console.log("use cached auth accountId", accountId);
+                }
 
-                            console.log("wulian wallet response:", walletInfo);
+                if (isMounted) {
+                    setWalletAccountId(accountId);
+                }
 
-                            if (isMounted) {
-                                setWalletAddress(nextWalletAddress);
-                                setHasCheckedWallet(true);
-                            }
+                if (accountId) {
+                    try {
+                        const walletInfo = await fetchWalletInfo(accountId);
+                        const nextWalletAddress =
+                            walletInfo.walletAddress?.trim() ?? "";
 
-                            if (walletInfo.status === "NoRegistered" || !nextWalletAddress) {
-                                message.warning("用户未注册，请先注册钱包");
-                            }
-                        } catch (error) {
-                            console.error("wulian wallet request failed:", error);
+                        console.log("wulian wallet response:", walletInfo);
 
-                            if (isMounted) {
-                                setWalletAddress("");
-                                setHasCheckedWallet(true);
-                            }
+                        if (isMounted) {
+                            setWalletAddress(nextWalletAddress);
+                            setHasCheckedWallet(true);
                         }
-                    } else if (isMounted) {
-                        setWalletAddress("");
-                        setHasCheckedWallet(true);
+
+                        if (walletInfo.status === "NoRegistered" || !nextWalletAddress) {
+                            message.warning("用户未注册，请先注册钱包");
+                        }
+                    } catch (error) {
+                        console.error("wulian wallet request failed:", error);
+
+                        if (isMounted) {
+                            setWalletAddress("");
+                            setHasCheckedWallet(true);
+                        }
                     }
+                } else if (isMounted) {
+                    setWalletAddress("");
+                    setHasCheckedWallet(true);
+                }
 
-                    // getAccount 返回的是无链账户资产，这里只取 DW20 可用余额限制输入上限。
-                    const account =
-                        (await noChainProvider.current.getAccount()) as AccountResponse;
+                // getAccount 返回的是无链账户资产，这里只取 DW20 可用余额限制输入上限。
+                const account =
+                    (await noChainProvider.current.getAccount()) as AccountResponse;
 
-                    console.log("getAccount", JSON.stringify(account));
+                console.log("getAccount", JSON.stringify(account));
 
-                    const dw20Balance = account.data?.balance?.find(
-                        (item) => item.coin === "DW20",
-                    );
+                const dw20Balance = account.data?.balance?.find(
+                    (item) => item.coin === "DW20",
+                );
 
-                    if (isMounted) {
-                        setDw20AvailableBalance(dw20Balance?.available_balance ?? "0");
-                    }
+                if (isMounted) {
+                    setDw20AvailableBalance(dw20Balance?.available_balance ?? "0");
                 }
             } catch (error) {
                 console.error("noChain init failed:", error);
@@ -381,6 +426,27 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             isMounted = false;
         };
     }, [activeMode, hasCheckedWallet, walletAddress]);
+
+    const refreshDw20Balance = async () => {
+        if (!noChainProvider.current) {
+            return;
+        }
+
+        try {
+            const account =
+                (await noChainProvider.current.getAccount()) as AccountResponse;
+
+            console.log("refresh getAccount", JSON.stringify(account));
+
+            const dw20Balance = account.data?.balance?.find(
+                (item) => item.coin === "DW20",
+            );
+
+            setDw20AvailableBalance(dw20Balance?.available_balance ?? "0");
+        } catch (error) {
+            console.error("refresh dw20 balance failed:", error);
+        }
+    };
 
     const maxInputAmount = useMemo(() => {
         if (activeMode === "exchange") {
@@ -612,6 +678,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
             const isSuccess = await sendContractMethod();
 
             if (isSuccess) {
+                await refreshDw20Balance();
                 message.success("兑换提交成功");
                 setAmount("");
             }
