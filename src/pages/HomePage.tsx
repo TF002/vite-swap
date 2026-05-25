@@ -41,22 +41,6 @@ type AuthResponse = {
 
 type NoChainProvider = InstanceType<typeof miniProgramApi.BrowserProvider>;
 
-type ContractAction = {
-    method_name: string;
-    args: {
-        evm_address: string;
-    };
-    max_gas: number;
-    amount: string;
-    symbol: string;
-    fee_symbol: string;
-};
-
-type ContractTxRawParams = {
-    receiverId: string;
-    sender_account_id: string;
-    actions: ContractAction;
-};
 
 type ExchangePreviewRecord = {
     chainless_tx_hash: string;
