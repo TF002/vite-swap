@@ -940,7 +940,7 @@ function SubmittingOverlay() {
                         aria-hidden="true"
                     ></span>
                     <p className="m-0 text-[16px] leading-none font-medium tracking-normal">
-                        提交质押中..
+                        兑换处理中，请稍后
                     </p>
                 </div>
             </div>
