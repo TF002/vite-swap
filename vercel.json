@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/wallet-api/:path*",
+      "destination": "http://mmt-user.budingcc.cc/:path*"
+    },
+    {
+      "source": "/bridge-api/:path*",
+      "destination": "https://dw20-lock-relayer.chainlessdw20.com/:path*"
+    },
+    {
+      "source": "/rpc",
+      "destination": "https://rpc-testnet.chainlessdw20.com/"
+    },
+    {
+      "source": "/rpc/:path*",
+      "destination": "https://rpc-testnet.chainlessdw20.com/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
