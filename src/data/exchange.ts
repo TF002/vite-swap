@@ -1,4 +1,4 @@
-export const availableAmount = 10000
+export const availableAmount = 0
 
 export const modes = {
   exchange: {

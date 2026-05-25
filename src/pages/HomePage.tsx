@@ -469,6 +469,11 @@ function HomePage({ onOpenRecords }: HomePageProps) {
     };
 
     const openConfirmDialog = async () => {
+        if (activeMode === "wallet") {
+            console.log("点击了奖金存入钱包");
+            return;
+        }
+
         if (!canExchange || isSubmittingExchange || isEstimatingFee) {
             return;
         }
@@ -495,7 +500,7 @@ function HomePage({ onOpenRecords }: HomePageProps) {
         }
     };
 
- const sendContractMethod = async () => {
+    const sendContractMethod = async () => {
         if (!noChainProvider.current) {
             message.warning("钱包插件未初始化");
             return false;
