@@ -221,7 +221,7 @@ async function pollDepositStatus(chainlessTxHash: string) {
             }
 
             if (status === "error") {
-                return false;
+                console.log("deposit status is error, keep polling:", retryCount + 1);
             }
         } catch (error) {
             console.error("deposit status request failed:", error);
