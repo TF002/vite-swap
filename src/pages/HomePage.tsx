@@ -462,9 +462,13 @@ function HomePage({ onOpenRecords }: HomePageProps) {
 
     const availableDisplayAmount = useMemo(() => {
         if (activeMode === "exchange") {
-            return Number(dw20AvailableBalance).toLocaleString(undefined, {
-                maximumFractionDigits: 8,
-            });
+            const dw20Balance = Number(dw20AvailableBalance);
+
+            if (Number.isFinite(dw20Balance) && dw20Balance >= 0) {
+                return Math.floor(dw20Balance).toLocaleString();
+            }
+
+            return "0";
         }
 
         return availableAmount.toLocaleString();
